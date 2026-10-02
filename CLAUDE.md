@@ -26,4 +26,4 @@ Podrobná specifikace: `MASTER_SPEC.md`. Architektura: `docs/AI_ARCHITECTURE.md`
 8. Úspěšný build není důkaz funkčnosti – spusťte `npm test` a `npm run typecheck`.
 
 ## Příkazy
-`npm install --legacy-peer-deps` · `npm test` · `npm run typecheck` · `npm run dev` · `npm run seed`
+`npm install --legacy-peer-deps` · `cp .env.example .env` (skripty `dev`/`start`/`seed` ho načtou samy) · `npm test` · `npm run typecheck` · `npm run dev` · `npm run seed`

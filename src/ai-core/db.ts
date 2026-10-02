@@ -1,6 +1,6 @@
 import { PGlite } from '@electric-sql/pglite';
-import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, readdirSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import type { Db } from './types.js';
 
 class PgliteDb implements Db {
@@ -19,6 +19,7 @@ class PgliteDb implements Db {
 
 /** dataDir prázdné = in-memory. */
 export async function openPglite(dataDir?: string): Promise<Db> {
+  if (dataDir) mkdirSync(dirname(dataDir), { recursive: true }); // PGlite vytvoří jen poslední úroveň
   const pg = new PGlite(dataDir || undefined);
   await pg.waitReady;
   return new PgliteDb(pg);

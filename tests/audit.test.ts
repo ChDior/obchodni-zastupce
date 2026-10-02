@@ -75,3 +75,19 @@ describe('hash řetěz – regrese', () => {
     await fresh.close();
   });
 });
+
+describe('perzistentní databáze', () => {
+  test('openPglite vytvoří i chybějící nadřazený adresář a data přežijí restart', async () => {
+    const { mkdtempSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const { openPglite } = await import('../src/ai-core/index.js');
+    const root = mkdtempSync(join(tmpdir(), 'beleta-'));
+    const dir = join(root, 'neexistuje', 'pg');
+    const a = await openPglite(dir);
+    await a.query('create table t (x int)'); await a.query('insert into t values (7)'); await a.close();
+    const b = await openPglite(dir);
+    expect((await b.query<any>('select x from t'))[0].x).toBe(7);
+    await b.close(); rmSync(root, { recursive: true, force: true });
+  });
+});

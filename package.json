@@ -8,9 +8,9 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "tsx watch src/server/main.ts",
-    "start": "tsx src/server/main.ts",
-    "seed": "tsx src/beleta/seed-cli.ts",
+    "dev": "node --env-file-if-exists=.env --import tsx --watch src/server/main.ts",
+    "start": "node --env-file-if-exists=.env --import tsx src/server/main.ts",
+    "seed": "node --env-file-if-exists=.env --import tsx src/beleta/seed-cli.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
