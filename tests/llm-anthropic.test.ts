@@ -77,6 +77,16 @@ describe('agent runtime s Claude providerem', () => {
 });
 
 describe('výběr poskytovatele z prostředí', () => {
+  test('Haiku: neposílá effort ani fallbacks (nepodporuje je)', async () => {
+    const { llm, label } = createLlmFromEnv({ ANTHROPIC_API_KEY: 'k', ANTHROPIC_MODEL: 'claude-haiku-4-5', ANTHROPIC_EFFORT: 'low' });
+    expect(label).toBe('Claude (claude-haiku-4-5)');
+    const calls: any[] = [];
+    (llm as any).client = fakeClient([{ content: [{ type: 'text', text: 'ok' }], stop_reason: 'end_turn' }], calls);
+    await llm!.complete({ system: 's', messages: [{ role: 'user', content: 'x' }], tools: [] });
+    expect(calls[0].model).toBe('claude-haiku-4-5');
+    expect(calls[0].output_config).toBeUndefined(); expect(calls[0].fallbacks).toBeUndefined(); expect(calls[0].betas).toBeUndefined();
+    expect(calls[0].thinking).toBeUndefined();
+  });
   test('Anthropic má přednost, výchozí model, přepínač a chyby konfigurace', () => {
     expect(createLlmFromEnv({ ANTHROPIC_API_KEY: 'k', OPENAI_API_KEY: 'o' }).llm).toBeInstanceOf(AnthropicProvider);
     expect(createLlmFromEnv({ ANTHROPIC_API_KEY: 'k' }).label).toBe('Claude (claude-opus-5-5)');
