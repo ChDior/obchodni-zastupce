@@ -37,3 +37,14 @@ Za reverzní proxy (TLS) – aplikace sama TLS neterminuje.
 
 ## Provozní poznámky
 Logy aplikace neobsahují PII; audit je v DB (`/ai-sales/activity`). Sledujte: počet `pending` schválení, chyby `llm_failure`, `max_steps`, stav integrity auditu.
+
+## Lokální model (Ollama) – bez poplatků za API
+```
+ollama pull qwen2.5:14b            # model s podporou tool callingu (např. qwen2.5, llama3.1)
+LLM_PROVIDER=openai
+OPENAI_BASE_URL=http://localhost:11434/v1
+OPENAI_API_KEY=ollama              # nesmí být prázdné, hodnota je libovolná
+OPENAI_MODEL=qwen2.5:14b
+OPENAI_TIMEOUT_MS=300000           # na CPU bývá odpověď pomalá
+```
+Ověřeno jen proti simulovanému OpenAI-kompatibilnímu serveru (`tests/openai-compatible.test.ts`); **skutečný model nebyl spuštěn** (síť sandboxu blokuje stahování). Očekávejte horší češtinu a méně spolehlivé volání nástrojů než u Claude/OpenAI; pravidla (slevy, schvalování, audit) tím nejsou dotčena. Před veřejným nasazením vyzkoušejte sadu reálných dotazů. Server musí běžet trvale (RAM/GPU).

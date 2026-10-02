@@ -15,7 +15,8 @@ export function createLlmFromEnv(env: Record<string, string | undefined>): { llm
   if (useOpenAI) {
     if (!env.OPENAI_API_KEY) throw new Error('LLM_PROVIDER=openai vyžaduje OPENAI_API_KEY');
     const model = env.OPENAI_MODEL ?? 'gpt-4.1';
-    return { llm: new OpenAIProvider({ apiKey: env.OPENAI_API_KEY, model, baseUrl: env.OPENAI_BASE_URL }), label: `OpenAI (${model})` };
+    const timeoutMs = env.OPENAI_TIMEOUT_MS ? Number(env.OPENAI_TIMEOUT_MS) : undefined; // lokální modely na CPU bývají pomalé
+    return { llm: new OpenAIProvider({ apiKey: env.OPENAI_API_KEY, model, baseUrl: env.OPENAI_BASE_URL, timeoutMs }), label: `OpenAI-kompatibilní (${model} @ ${env.OPENAI_BASE_URL ?? 'api.openai.com'})` };
   }
   return { label: 'vypnuto – chybí ANTHROPIC_API_KEY / OPENAI_API_KEY' };
 }
