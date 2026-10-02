@@ -9,7 +9,7 @@
 ## Volba technologií (a odchylky od preferencí zadání)
 | Oblast | Volba | Poznámka |
 |---|---|---|
-| LLM | OpenAI Chat Completions + function calling přes vlastní tenký runtime | **Ne Agents SDK**: potřebujeme plnou kontrolu nad guardrails/auditem na každém volání a offline testovatelnost (`ScriptedProvider`). Přechod na Agents SDK je možný – tools jsou čistá schémata + handler |
+| LLM | **Claude (Anthropic SDK, výchozí `claude-opus-5-5`)** nebo OpenAI Chat Completions – obojí za rozhraním `LlmProvider`, přepínač `LLM_PROVIDER`. Vlastní tenký runtime s tool use | **Ne OpenAI Agents SDK ani Claude Agent SDK**: potřebujeme plnou kontrolu nad guardrails/auditem na každém volání a offline testovatelnost (`ScriptedProvider`). Přechod na Agents SDK je možný – tools jsou čistá schémata + handler |
 | Backend | Node 22 + TypeScript + Fastify | Žádný existující backend |
 | DB | PostgreSQL dialekt; MVP PGlite | Pro produkci PostgreSQL server |
 | Automatizace | n8n přes webhook + cron → interní endpoint | |
@@ -46,3 +46,11 @@
 7. Pilot s lidským schvalováním všech nabídek/e-mailů → postupné uvolňování politik.
 8. Pozdější fáze: PDF nabídky, GDPR nástroje, hlas/telefon, outbound.
 9. Druhé nasazení (CIHLICKY.CZ): vytáhnout `ai-core` do balíčku (npm workspace), přidat doménu `cihlicky`.
+
+## LLM poskytovatelé (Claude / OpenAI)
+`src/ai-core/llm-anthropic.ts` (`AnthropicProvider`, oficiální `@anthropic-ai/sdk`) a `OpenAIProvider` implementují stejné rozhraní; výběr v `src/server/llm-config.ts`. Bezpečnost nezávisí na poskytovateli – guardy a whitelisty jsou v kódu.
+Specifika Claude:
+- Výchozí model `claude-opus-5-5` (u této řady nelze vypnout thinking; hloubku řídí `ANTHROPIC_EFFORT`). Pro nižší cenu `ANTHROPIC_MODEL=claude-sonnet-5-5`.
+- **Thinking bloky** z kola s nástroji se vracejí API beze změny (`LlmMessage.raw`); mezi chatovými zprávami se historie ukládá jako čistý text (thinking se odstraňuje ze všech starších kol najednou, což kontrolu „preserved thinking“ nenarušuje). Prompty agentů a sada nástrojů jsou za běhu neměnné. Pokud by API při úpravě historie vracelo 400, nastavte opt-in `drop_block` (beta `thinking-binding-controls-2026-08-01`) – zatím neověřeno na živém API.
+- `fallbacks: "default"` (beta `server-side-fallback-2026-07-01`): při odmítnutí bezpečnostním klasifikátorem API samo zopakuje požadavek na jiném modelu; vypnutí `ANTHROPIC_FALLBACKS=false`. Odmítnutí bez záchrany vrátí zákazníkovi předání kolegovi.
+- Forced `tool_choice` se nepoužívá (u nových modelů vrací 400).

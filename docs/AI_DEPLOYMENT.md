@@ -10,7 +10,9 @@ Node.js ≥ 22. Instalace: `npm ci --legacy-peer-deps` (npm 10 má s některými
 | `PUBLIC_ORIGIN` | přesný origin administrace (kontrola Origin proti CSRF) |
 | `DATA_DIR` | adresář PGlite (perzistence); **zálohovat** |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` (≥12 znaků) | vytvoří prvního admina, pokud žádný není |
-| `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_BASE_URL` | LLM; bez klíče chat vrací 503 |
+| `LLM_PROVIDER` | `anthropic` \| `openai` \| `none`; prázdné = Anthropic, pokud je `ANTHROPIC_API_KEY`, jinak OpenAI |
+| `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` (výchozí `claude-opus-5-5`; levnější `claude-sonnet-5-5`), `ANTHROPIC_EFFORT`, `ANTHROPIC_FALLBACKS` | Claude. Klíč: console.anthropic.com → API keys |
+| `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_BASE_URL` | OpenAI (alternativa); bez jakéhokoli klíče chat vrací 503 |
 | `INTERNAL_TOKEN` | n8n → `/api/internal/*` |
 | `N8N_EMAIL_WEBHOOK` | pokud prázdné, e-maily se jen zapíší do `email_outbox` (transport `log`) |
 | `TRUST_PROXY=true` | za reverzní proxy (správná IP pro rate limit) |

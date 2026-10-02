@@ -4,10 +4,12 @@ export interface LlmMessage {
   content: string | null;
   tool_calls?: LlmToolCall[];
   tool_call_id?: string;
+  /** Neprůhledný obsah specifický pro provider (např. thinking bloky Claude) – musí se vracet beze změny. */
+  raw?: unknown;
 }
 export interface LlmToolSpec { name: string; description: string; parameters: object }
 export interface LlmRequest { system: string; messages: LlmMessage[]; tools: LlmToolSpec[] }
-export interface LlmResponse { content: string | null; tool_calls: LlmToolCall[] }
+export interface LlmResponse { content: string | null; tool_calls: LlmToolCall[]; raw?: unknown }
 
 /** Provider-agnostní rozhraní. AI nikdy nedrží obchodní data – jen volá nástroje. */
 export interface LlmProvider { complete(req: LlmRequest): Promise<LlmResponse> }

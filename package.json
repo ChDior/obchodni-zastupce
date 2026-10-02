@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "description": "BELETA AI SALES – autonomní obchodní zástupce s lidskou kontrolou (AI core + BELETA doména + admin)",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "tsx watch src/server/main.ts",
     "start": "tsx src/server/main.ts",
@@ -13,6 +15,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
     "@electric-sql/pglite": "^0.5.8",
     "fastify": "^5.0.0",
     "zod": "^4.0.0"

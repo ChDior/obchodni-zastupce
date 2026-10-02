@@ -42,7 +42,7 @@ export async function runAgent(def: AgentDef, history: LlmMessage[], p: RunParam
     if (!resp.tool_calls.length) {
       return { reply: resp.content ?? '', sources: dedupe(sources), trace, approvalIds };
     }
-    messages.push({ role: 'assistant', content: resp.content, tool_calls: resp.tool_calls });
+    messages.push({ role: 'assistant', content: resp.content, tool_calls: resp.tool_calls, raw: resp.raw });
 
     for (const call of resp.tool_calls) {
       let output: unknown;

@@ -9,13 +9,14 @@
 | `tests/guardrails.test.ts` | 10 human approval (schválit/zamítnout/expirace/failed/jednou) · 11 odmítnutí neoprávněné slevy · termín, podmínky, hodnota, stavy nabídky · e-mail (příjemce z CRM, limity, selhání transportu) |
 | `tests/audit.test.ts` | 12 audit (aktér, stav, entity, bez PII, redakce) · append-only · detekce zásahu do hash řetězu · fail-closed |
 | `tests/agents.test.ts` | manager bez datových nástrojů · whitelisty · prompty bez cen · ai-core bez závislosti na doméně · delegace, zdroje, prompt injection, max kroků, chat, kompletní nákupní scénář, OpenAI provider (mock fetch) |
+| `tests/llm-anthropic.test.ts` | Claude provider (převod zpráv, thinking bloky zpět beze změny, tool_result, refusal, chyba bez těla, fallbacks), agent runtime přes Claude, výběr poskytovatele z env |
 | `tests/server.test.ts` | veřejné API · login/CSRF/role/rate limit · cookie flagy · hlavičky · admin workflow včetně schválení · interní token |
 
 Chybové stavy: neexistující entity, neplatné vstupy, nulové/záporné/obří hodnoty, chybějící data (cena, sklad, pravidla), cizí vazby, výpadek LLM/transportu, expirace, dvojí rozhodnutí.
 
 ## Co testy NEdokazují (manuální/budoucí)
 - Chování skutečného LLM (kvalita dialogu, dodržování promptů) – nutná evaluační sada na živém modelu; bezpečnost však nespoléhá na model, ale na guardy (testovány).
-- Živý OpenAI/n8n/SMTP, PostgreSQL server, zátěž, penetrační test.
+- Živý Claude/OpenAI/n8n/SMTP, PostgreSQL server, zátěž, penetrační test.
 - UI bylo ověřeno ručně přes headless Chromium (přihlášení, dashboard, schválení); nejsou automatizované UI testy.
 
 ## Jak psát nové testy

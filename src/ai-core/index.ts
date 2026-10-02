@@ -14,6 +14,7 @@ export * from './policy.js';
 export * from './registry.js';
 export * from './redact.js';
 export * from './llm.js';
+export * from './llm-anthropic.js';
 export { runAgent, type AgentDef, type RunResult, type TraceItem } from './agent.js';
 
 export interface AiCore {

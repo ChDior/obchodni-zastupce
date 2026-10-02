@@ -5,11 +5,11 @@ Autonomní AI obchodní zástupce BELETA Plus s.r.o. – **autonomní ≠ bez ko
 ## Rychlý start
 ```bash
 npm install --legacy-peer-deps
-cp .env.example .env        # nastavte ADMIN_*, OPENAI_API_KEY, INTERNAL_TOKEN
-npm test                    # 94+ testů
+cp .env.example .env        # nastavte ADMIN_*, ANTHROPIC_API_KEY (nebo OPENAI_API_KEY), INTERNAL_TOKEN
+npm test                    # 100+ testů
 npm run dev                 # http://localhost:3000/ai-sales  (admin),  /widget  (web poradce)
 ```
-Bez `OPENAI_API_KEY` běží admin i REST API (katalog, kalkulace), chat vrací 503.
+LLM: **Claude (Anthropic)** nebo OpenAI – přepínač `LLM_PROVIDER`. Bez klíče běží admin i REST API (katalog, kalkulace), chat vrací 503.
 Při `NODE_ENV!=production` se nahrají **ukázková** data (SKU `DEMO-*`). Produkční ceny/sklad se musí importovat z ERP – viz `docs/AI_DEPLOYMENT.md`.
 
 ## Dokumentace
