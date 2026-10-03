@@ -82,3 +82,21 @@ describe('GDPR', () => {
   });
 });
 void bootstrap;
+
+describe('zákazníci v administraci', () => {
+  test('seznam s hledáním a detail s navázanými záznamy', async () => {
+    const { app, c } = await withQuote();
+    const srv = await buildServer(app, { publicOrigin: 'http://localhost:3000', secureCookies: false, trustProxy: false });
+    const H = { 'x-requested-with': 'beleta-admin', 'content-type': 'application/json' };
+    expect((await srv.inject('/api/admin/ai-sales/customers')).statusCode).toBe(401);
+    const l = await srv.inject({ method: 'POST', url: '/api/admin/login', headers: H, payload: { email: 'admin@test.cz', password: 'test-password-123' } });
+    const cookie = String(l.headers['set-cookie']).split(';')[0];
+    const list = (await srv.inject({ url: '/api/admin/ai-sales/customers?q=NOVAK%25', headers: { cookie } })).json();
+    expect(list.length).toBe(1); expect(list[0].quotes).toBe(1);
+    expect((await srv.inject({ url: '/api/admin/ai-sales/customers?q=nikdo', headers: { cookie } })).json()).toEqual([]);
+    const d = (await srv.inject({ url: `/api/admin/ai-sales/customers/${c}`, headers: { cookie } })).json();
+    expect(d.customer.email).toBe('jan.novak@example.cz'); expect(d.quotes.length).toBe(1);
+    expect((await srv.inject({ url: '/api/admin/ai-sales/customers/00000000-0000-0000-0000-000000000000', headers: { cookie } })).statusCode).toBe(404);
+    await srv.close();
+  });
+});

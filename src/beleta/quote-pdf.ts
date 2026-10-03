@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import PDFDocument from 'pdfkit';
 import type { Db, PolicyReader } from '../ai-core/index.js';
 import { DomainError } from '../ai-core/index.js';
-import { ROOT } from './bootstrap.js';
+import { ROOT } from './paths.js';
 
 const FONT = join(ROOT, 'assets/fonts/DejaVuSans.ttf');
 const BOLD = join(ROOT, 'assets/fonts/DejaVuSans-Bold.ttf');

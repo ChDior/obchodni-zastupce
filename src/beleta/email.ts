@@ -1,7 +1,8 @@
 import nodemailer from 'nodemailer';
 import type { Db } from '../ai-core/index.js';
 
-export interface EmailMessage { to: string; subject: string; body: string; ref: string }
+export interface EmailAttachment { filename: string; content: Buffer; contentType: string }
+export interface EmailMessage { to: string; subject: string; body: string; ref: string; attachments?: EmailAttachment[] }
 export interface EmailTransport { name: string; send(m: EmailMessage): Promise<void> }
 
 /** Výchozí transport: nic neodesílá, jen zapíše do outboxu (bezpečné pro vývoj/MVP). */
@@ -16,7 +17,7 @@ export class N8nWebhookTransport implements EmailTransport {
   constructor(private url: string, private fetchImpl: typeof fetch = fetch) {}
   async send(m: EmailMessage): Promise<void> {
     const res = await this.fetchImpl(this.url, { method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(m), signal: AbortSignal.timeout(15_000) });
+      body: JSON.stringify({ ...m, attachments: m.attachments?.map((a) => ({ filename: a.filename, contentType: a.contentType, content_base64: a.content.toString('base64') })) }), signal: AbortSignal.timeout(15_000) });
     if (!res.ok) throw new Error(`n8n webhook HTTP ${res.status}`);
   }
 }
@@ -35,7 +36,7 @@ export class SmtpTransport implements EmailTransport {
     });
   }
   async send(m: EmailMessage): Promise<void> {
-    await this.tx.sendMail({ from: this.cfg.from, to: m.to, subject: m.subject, text: m.body, headers: { 'X-Beleta-Ref': m.ref } });
+    await this.tx.sendMail({ from: this.cfg.from, to: m.to, subject: m.subject, text: m.body, attachments: m.attachments?.map((a) => ({ filename: a.filename, content: a.content, contentType: a.contentType })), headers: { 'X-Beleta-Ref': m.ref } });
   }
 }
 

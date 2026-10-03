@@ -20,7 +20,7 @@ Chybové kódy společné: `unknown_tool`, `validation_error`, `forbidden` (scop
 | `update_project` | crm:write | project_id, … | status | `won/lost` → schválení |
 | `create_quote` | quote:write | customer_id, items[], shipping_postal_code?, discount_pct?, … | číslo, součty, termín, varování skladu | **schválení**: sleva > limit, vlastní podmínky, dřívější termín, hodnota > práh |
 | `update_quote` | quote:write | quote_id, … | totéž | AI nesmí `sent/accepted/rejected` (`status_not_allowed`), odeslanou nabídku nelze měnit (`quote_locked`), jinak jako create |
-| `send_email` | email:send | customer_id, subject, body, purpose | email_id, status | příjemce jen z CRM; `no_recipient`; `daily_limit`; AI → schválení dle `email.ai_auto_send` |
+| `send_email` | email:send | customer_id, subject, body, purpose, quote_id?, followup_id?, attach_quote_pdf? (jen s `quote_id` zákazníka, jinak `no_quote`/`quote_mismatch`) | email_id, status | příjemce jen z CRM; `no_recipient`; `daily_limit`; AI → schválení dle `email.ai_auto_send` |
 | `create_followup` | followup:write | customer_id, due_in_days/due_at, channel, purpose | followup_id | `past_due`, `too_far`, `too_many_followups` |
 | `request_human_approval` | approval:request | category, summary, reason | approval_id | – |
 | `search_knowledge` | kb:read | query, limit | pasáže + zdroj | – |

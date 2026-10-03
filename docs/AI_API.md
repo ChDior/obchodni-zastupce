@@ -24,6 +24,8 @@ Veřejné API **nemá žádný zápisový endpoint**; zápisy dělá jen AI pře
 | POST | `…/approvals/:id/approve|reject` `{note?}` | admin, sales |
 | POST | `…/followups/:id/done|cancel` | admin, sales |
 | GET | `…/quotes/:id/pdf` – PDF nabídky (`application/pdf`; nefinální stavy mají značku NÁVRH; hlavička a patička z politik `quote.pdf_seller`, `quote.pdf_footer`) | všechny |
+| GET | `…/customers?q=` · `…/customers/:id` – seznam a detail zákazníka (leady, projekty, nabídky, follow-upy, e-maily) | všechny |
+| POST | `…/quotes/:id/send` `{subject?,body?}` – odešle nabídku (stav ready/sent) e-mailem s PDF přílohou přes tool `send_email`, po úspěchu nastaví stav `sent` (409 `quote_not_ready`) | admin, sales |
 | GET | `…/customers/:id/export` – JSON všech údajů o zákazníkovi (GDPR přístup, auditováno) | admin |
 | POST | `…/customers/:id/erase` – anonymizace zákazníka (GDPR výmaz; 409 `already_erased`, auditováno) | admin |
 | POST | `/api/admin/2fa/setup` → `{secret, otpauth_uri}` · `/2fa/enable` `{code}` → `{recovery_codes}` (zobrazí se jen jednou) · `/2fa/disable` `{password, code}` | přihlášený (sám sobě) |

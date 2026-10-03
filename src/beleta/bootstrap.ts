@@ -1,5 +1,5 @@
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
+import { ROOT } from './paths.js';
 import { createAiCore, migrate, openPglite, runAgent, DomainError, redact,
   type AiCore, type Db, type LlmProvider, type LlmMessage, type Source } from '../ai-core/index.js';
 import { followupBotActor, webAdvisorActor } from './actors.js';
@@ -11,7 +11,7 @@ import { seedDemo } from './seed.js';
 import { buildTools } from './tools.js';
 import { randomUUID } from 'node:crypto';
 
-export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+export { ROOT };
 
 export interface BootstrapOptions {
   db?: Db; dataDir?: string; llm?: LlmProvider; emailTransport?: EmailTransport; knowledge?: KnowledgeProvider;

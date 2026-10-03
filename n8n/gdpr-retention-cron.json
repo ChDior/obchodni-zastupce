@@ -1,0 +1,9 @@
+{
+  "name": "BELETA AI SALES – GDPR retence (denně)",
+  "nodes": [
+    { "parameters": { "rule": { "interval": [{ "field": "days", "daysInterval": 1, "triggerAtHour": 3 }] } }, "name": "Denně ve 3:00", "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1.2, "position": [0, 0] },
+    { "parameters": { "method": "POST", "url": "={{ $env.BELETA_AI_URL }}/api/internal/gdpr/retention", "sendHeaders": true, "headerParameters": { "parameters": [{ "name": "X-Internal-Token", "value": "={{ $env.BELETA_INTERNAL_TOKEN }}" }] } }, "name": "Spustit retenci", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [260, 0] }
+  ],
+  "connections": { "Denně ve 3:00": { "main": [[{ "node": "Spustit retenci", "type": "main", "index": 0 }]] } },
+  "settings": { "executionOrder": "v1" }
+}

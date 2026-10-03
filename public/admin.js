@@ -40,7 +40,7 @@ const tone = (s) => ({ approved: 'ok', executed: 'ok', success: 'ok', sent: 'ok'
 const chip = (s) => h('span', { class: 'chip ' + tone(s) }, s);
 
 const PAGES = [
-  ['', 'Dashboard'], ['/leads', 'Leady'], ['/projects', 'Projekty'], ['/quotes', 'Nabídky'], ['/followups', 'Follow-up'],
+  ['', 'Dashboard'], ['/leads', 'Leady'], ['/projects', 'Projekty'], ['/quotes', 'Nabídky'], ['/customers', 'Zákazníci'], ['/followups', 'Follow-up'],
   ['/approvals', 'Ke schválení'], ['/activity', 'Aktivita AI'], ['/usage', 'Spotřeba AI'], ['/policies', 'Pravidla AI'], ['/security', 'Zabezpečení'],
 ];
 const path = () => location.pathname.replace(/\/+$/, '').slice(BASE.length);
@@ -141,6 +141,17 @@ const views = {
         { label: 'Entita', render: (r) => r.entity_type ? `${r.entity_type}:${String(r.entity_id).slice(0, 8)}` : '' }, { label: 'ms', num: true, render: (r) => r.duration_ms ?? '' },
       ], rows, (r) => showJson('Záznam #' + r.id, r)));
   },
+  async '/customers' () {
+    const p = new URLSearchParams(location.search);
+    const rows = await api(S('/customers' + (p.get('q') ? '?q=' + encodeURIComponent(p.get('q')) : '')));
+    const search = h('input', { placeholder: 'Jméno, e-mail, firma, IČO', value: p.get('q') || '' });
+    const go2 = () => { history.pushState({}, '', BASE + '/customers' + (search.value ? '?q=' + encodeURIComponent(search.value) : '')); render(); };
+    search.addEventListener('keydown', (e) => { if (e.key === 'Enter') go2(); });
+    return h('div', {}, h('h2', {}, 'Zákazníci'), h('div', { class: 'toolbar' }, search, h('button', { onclick: go2 }, 'Hledat')),
+      table([{ label: 'Jméno', render: (r) => r.erased_at ? h('i', {}, 'anonymizován') : r.name }, { label: 'Firma', render: (r) => r.company_name || '' },
+        { label: 'Kontakt', render: (r) => [r.email, r.phone].filter(Boolean).join(' · ') }, { label: 'Leady', num: true, key: 'leads' }, { label: 'Nabídky', num: true, key: 'quotes' },
+        { label: 'Souhlas', render: (r) => (r.consent_marketing ? 'ano' : 'ne') }, { label: 'Vytvořen', render: (r) => fmt.d(r.created_at) }], rows, openCustomer));
+  },
   async '/usage' () {
     const d = new URLSearchParams(location.search).get('days') || '30';
     const r = await api(S('/usage?days=' + encodeURIComponent(d)));
@@ -214,6 +225,7 @@ function showJson(title, obj) {
   document.body.append(dlg); dlg.showModal();
 }
 async function openQuote(r) {
+  const r0 = r;
   const q = await api(S('/quotes/' + r.id));
   const setStatus = async (status) => { try { const res = await api(S('/quotes/' + r.id), { method: 'PATCH', body: { status } }); toast(res.pending_approval ? 'Čeká na schválení' : 'Uloženo'); dlg.close(); dlg.remove(); render(); } catch (e) { toast(e.message); } };
   const dlg = h('dialog', {}, h('h3', {}, `Nabídka ${q.number}`), h('p', { class: 'muted' }, `${q.customer_name} · `, chip(q.status)),
@@ -221,7 +233,29 @@ async function openQuote(r) {
     h('p', {}, `Doprava: ${fmt.money(Number(q.shipping_net))} · Sleva: ${q.discount_pct} % · Celkem bez DPH: `, h('b', {}, fmt.money(Number(q.total_net))), ` · s DPH: ${fmt.money(Number(q.total_gross))}`),
     q.custom_terms ? h('p', {}, 'Vlastní podmínky: ' + q.custom_terms) : null,
     h('div', { class: 'toolbar' }, user.role !== 'viewer' ? [h('button', { onclick: () => setStatus('ready') }, 'Připraveno'), h('button', { class: 'primary', onclick: () => setStatus('sent') }, 'Označit jako odeslanou'), h('button', { class: 'danger', onclick: () => setStatus('rejected') }, 'Zamítnuta')] : null,
+      user.role !== 'viewer' && ['ready', 'sent'].includes(q.status) ? h('button', { class: 'primary', onclick: async () => { if (!confirm('Odeslat nabídku s PDF zákazníkovi e-mailem?')) return; try { const r = await api(S('/quotes/' + r0.id + '/send'), { method: 'POST', body: {} }); toast(r.email_status === 'sent' ? 'E-mail odeslán' : 'E-mail se nepodařilo odeslat (' + r.email_status + ')'); dlg.close(); dlg.remove(); render(); } catch (e) { toast(e.message); } } }, 'Odeslat e-mailem s PDF') : null,
       h('button', { onclick: () => window.open('/api/admin' + S('/quotes/' + r.id + '/pdf'), '_blank', 'noopener') }, 'PDF'),
+      h('button', { onclick: () => { dlg.close(); dlg.remove(); } }, 'Zavřít')));
+  document.body.append(dlg); dlg.showModal();
+}
+
+async function openCustomer(r) {
+  const d = await api(S('/customers/' + r.id)); const c = d.customer;
+  const sec = (title, cols, rows) => [h('h4', {}, title), table(cols, rows)];
+  const isAdmin = user.role === 'admin';
+  const dlg = h('dialog', {}, h('h3', {}, c.erased_at ? 'Anonymizovaný zákazník' : c.name),
+    h('p', { class: 'muted' }, [c.company_name, c.ico && 'IČO ' + c.ico, c.email, c.phone, [c.street, c.postal_code, c.city].filter(Boolean).join(' ')].filter(Boolean).join(' · ') || '–'),
+    c.note ? h('p', {}, c.note) : null,
+    sec('Leady', [{ label: 'Stav', render: (x) => chip(x.status) }, { label: 'Skóre', num: true, key: 'score' }, { label: 'Shrnutí', key: 'summary' }], d.leads),
+    sec('Projekty', [{ label: 'Projekt', key: 'name' }, { label: 'Stav', render: (x) => chip(x.status) }, { label: 'Hodnota', num: true, render: (x) => fmt.money(x.estimated_value_net) }], d.projects),
+    sec('Nabídky', [{ label: 'Číslo', key: 'number' }, { label: 'Stav', render: (x) => chip(x.status) }, { label: 'Bez DPH', num: true, render: (x) => fmt.money(x.total_net) }], d.quotes),
+    sec('Follow-upy', [{ label: 'Termín', render: (x) => fmt.dt(x.due_at) }, { label: 'Účel', key: 'purpose' }, { label: 'Stav', render: (x) => chip(x.status) }], d.followups),
+    sec('E-maily', [{ label: 'Datum', render: (x) => fmt.dt(x.created_at) }, { label: 'Předmět', key: 'subject' }, { label: 'Stav', render: (x) => chip(x.status) }], d.emails),
+    h('div', { class: 'toolbar' },
+      isAdmin && !c.erased_at ? h('button', { onclick: () => window.open('/api/admin' + S('/customers/' + c.id + '/export'), '_blank', 'noopener') }, 'Export dat (GDPR)') : null,
+      isAdmin && !c.erased_at ? h('button', { class: 'danger', onclick: async () => {
+        if (prompt('Anonymizace je nevratná. Pro potvrzení napište ANONYMIZOVAT:') !== 'ANONYMIZOVAT') return;
+        try { await api(S('/customers/' + c.id + '/erase'), { method: 'POST', body: {} }); toast('Zákazník anonymizován'); dlg.close(); dlg.remove(); render(); } catch (e) { toast(e.message); } } }, 'Anonymizovat (GDPR výmaz)') : null,
       h('button', { onclick: () => { dlg.close(); dlg.remove(); } }, 'Zavřít')));
   document.body.append(dlg); dlg.showModal();
 }

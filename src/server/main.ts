@@ -15,7 +15,7 @@ const app = await bootstrap({
 });
 const server = await buildServer(app, {
   publicOrigin: env.PUBLIC_ORIGIN ?? `http://localhost:${env.PORT ?? 3000}`, internalToken: env.INTERNAL_TOKEN,
-  llmPricing: pricingFromEnv(env), secureCookies: production, trustProxy: env.TRUST_PROXY === 'true',
+  widgetFrameAncestors: env.WIDGET_FRAME_ANCESTORS?.split(/[\s,]+/).filter((o) => /^https?:\/\/[^\s;']+$/.test(o)), llmPricing: pricingFromEnv(env), secureCookies: production, trustProxy: env.TRUST_PROXY === 'true',
 });
 await server.listen({ port: Number(env.PORT ?? 3000), host: env.HOST ?? '0.0.0.0' });
 console.log(`BELETA AI SALES běží na portu ${env.PORT ?? 3000} (AI: ${llmLabel})`);

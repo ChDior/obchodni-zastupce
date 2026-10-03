@@ -12,7 +12,8 @@ BELETA AI SALES pro BELETA Plus s.r.o. – autonomní AI obchodní zástupce s l
 - PDF nabídek (pdfkit, font DejaVu v `assets/fonts`, tlačítko v detailu nabídky) a GDPR (export, výmaz, retence – REST + `docs/AI_API.md`; UI tlačítka pro výmaz zatím nejsou).
 - 2FA (TOTP + záložní kódy) a správa uživatelů (`/ai-sales/users`, `/ai-sales/security`).
 - Import CSV (`npm run import`, šablony `data/import-templates/`, REST `/import/:typ`) a logování tokenů (`ai_llm_usage`, stránka Spotřeba AI; ceny volitelně `LLM_PRICE_*`).
-- 130 testů, typecheck čistý. Dokumentace v `docs/` (CURRENT_ARCHITECTURE, GAP_ANALYSIS, AI_*).
+- Nabídky: číslování po letech, odeslání e-mailem s PDF přílohou (tool i tlačítko v administraci); stránka Zákazníci s GDPR tlačítky; vložení widgetu (`WIDGET_FRAME_ANCESTORS`); `Dockerfile`, CI (`.github/workflows`), n8n workflow v `n8n/` (Docker/CI/n8n neověřeno).
+- 136 testů, typecheck čistý. Dokumentace v `docs/` (CURRENT_ARCHITECTURE, GAP_ANALYSIS, AI_*).
 - Windows: `start-windows.cmd` + `scripts/setup-windows.ps1` (instalace, `.env`, spuštění). Uživatel ho úspěšně spustil a je přihlášený do administrace.
 
 ## Rozhodnutí

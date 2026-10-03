@@ -4,7 +4,8 @@ import { SCOPES } from './actors.js';
 import { checkStock, getPrice, getProduct, resolveProduct, searchProducts, src } from './catalog.js';
 import { calculateAccessories, calculateMaterial, calculateShipping } from './calc.js';
 import * as crm from './crm.js';
-import { dailyAiEmailCount } from './email.js';
+import { dailyAiEmailCount, type EmailAttachment } from './email.js';
+import { renderQuotePdf } from './quote-pdf.js';
 import type { KnowledgeProvider } from './knowledge.js';
 import { dateStr, isoDate, num } from './util.js';
 
@@ -227,9 +228,15 @@ export function buildTools({ knowledge }: BuildToolsDeps): T[] {
       input: z.object({
         customer_id: uuid, subject: z.string().min(3).max(200), body: z.string().min(10).max(8000),
         purpose: z.enum(['quote_delivery', 'followup', 'answer', 'other']).default('other'), quote_id: uuid.optional(), followup_id: uuid.optional(),
+        attach_quote_pdf: z.boolean().optional().describe('Přiloží PDF nabídky quote_id'),
       }).strict(),
       guard: async (ctx, i) => {
         const c = await crm.requireCustomer(ctx.db, i.customer_id);
+        if (i.attach_quote_pdf) {
+          if (!i.quote_id) return { decision: 'deny', code: 'no_quote', message: 'Pro přílohu PDF je nutné quote_id' };
+          const qq = await ctx.db.query<any>('select customer_id from quotes where id=$1', [i.quote_id]);
+          if (!qq.length || qq[0].customer_id !== i.customer_id) return { decision: 'deny', code: 'quote_mismatch', message: 'Nabídka nepatří tomuto zákazníkovi' };
+        }
         if (!c.email) return { decision: 'deny', code: 'no_recipient', message: 'Zákazník nemá e-mail' };
         if (ctx.actor.type !== 'ai') return { decision: 'allow' };
         const limit = Number(await ctx.policy.get('email.daily_limit', 50));
@@ -247,8 +254,13 @@ export function buildTools({ knowledge }: BuildToolsDeps): T[] {
            values ($1,$2,$3,$4,$5,$6,$7,'draft',$8,$9) returning id`,
           [i.customer_id, c.email, i.subject, i.body, i.purpose, i.quote_id ?? null, i.followup_id ?? null, transport.name, ctx.actor.id]);
         const id = ins[0].id as string;
+        let attachments: EmailAttachment[] | undefined;
+        if (i.attach_quote_pdf && i.quote_id) {
+          const pdf = await renderQuotePdf(ctx.db, ctx.policy, i.quote_id);
+          attachments = [{ filename: pdf.filename, content: pdf.buffer, contentType: 'application/pdf' }];
+        }
         try {
-          await transport.send({ to: c.email, subject: i.subject, body: i.body, ref: id });
+          await transport.send({ to: c.email, subject: i.subject, body: i.body, ref: id, attachments });
           await ctx.db.query(`update email_outbox set status='sent', sent_at=now() where id=$1`, [id]);
           return { data: { email_id: id, status: 'sent', transport: transport.name }, entity: { type: 'email', id } };
         } catch {

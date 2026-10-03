@@ -14,7 +14,7 @@ import { ROOT, type Beleta } from '../beleta/bootstrap.js';
 import { RateLimiter } from './ratelimit.js';
 
 export interface ServerConfig {
-  publicOrigin: string; internalToken?: string; secureCookies: boolean; trustProxy: boolean;
+  publicOrigin: string; internalToken?: string; widgetFrameAncestors?: string[]; secureCookies: boolean; trustProxy: boolean;
   llmPricing?: LlmPricing; chatPerMinute?: number; loginMax?: number; publicPerMinute?: number;
 }
 
@@ -30,7 +30,7 @@ const uuid = z.string().uuid();
 const STATUS_BY_CODE: Record<string, number> = {
   validation_error: 400, bad_message: 400, forbidden: 403, invalid_credentials: 401, unknown_tool: 404, not_found: 404,
   product_not_found: 404, price_not_found: 404, stock_unknown: 404, customer_not_found: 404, lead_not_found: 404, project_not_found: 404, quote_not_found: 404,
-  not_pending: 409, already_erased: 409, user_exists: 409, totp_required: 401, invalid_code: 400, totp_already_enabled: 409, totp_not_enabled: 409, ai_unavailable: 503, denied: 403,
+  not_pending: 409, already_erased: 409, user_exists: 409, quote_not_ready: 409, totp_required: 401, invalid_code: 400, totp_already_enabled: 409, totp_not_enabled: 409, ai_unavailable: 503, denied: 403,
 };
 
 export async function buildServer(app: Beleta, cfg: ServerConfig) {
@@ -43,12 +43,13 @@ export async function buildServer(app: Beleta, cfg: ServerConfig) {
   const file = (name: string) => { let b = files.get(name); if (!b) { b = readFileSync(join(ROOT, 'public', name)); files.set(name, b); } return b; };
 
   /* ---------- bezpečnostní hlavičky ---------- */
-  f.addHook('onSend', async (_req, reply) => {
+  f.addHook('onSend', async (req, reply) => {
+    const embeddable = !!cfg.widgetFrameAncestors?.length && req.url.split('?')[0] === '/widget';
     reply.header('x-content-type-options', 'nosniff');
-    reply.header('x-frame-options', 'DENY');
+    if (!embeddable) reply.header('x-frame-options', 'DENY');
     reply.header('referrer-policy', 'no-referrer');
     reply.header('permissions-policy', 'camera=(), microphone=(), geolocation=()');
-    reply.header('content-security-policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+    reply.header('content-security-policy', `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors ${embeddable ? cfg.widgetFrameAncestors!.join(' ') : "'none'"}; base-uri 'none'; form-action 'self'`);
     if (cfg.secureCookies) reply.header('strict-transport-security', 'max-age=31536000; includeSubDomains');
     if (reply.getHeader('cache-control') === undefined) reply.header('cache-control', 'no-store');
   });
@@ -209,6 +210,29 @@ export async function buildServer(app: Beleta, cfg: ServerConfig) {
     const id = uuid.safeParse((req.params as any).id); if (!id.success) throw new DomainError('validation_error', 'Neplatné id');
     const { filename, buffer } = await renderQuotePdf(app.db, app.core.policy, id.data);
     return reply.type('application/pdf').header('content-disposition', `inline; filename="${filename}"`).send(buffer);
+  });
+  f.post(`${S}/quotes/:id/send`, async (req, reply) => {
+    needWrite(req);
+    const id = uuid.safeParse((req.params as any).id); if (!id.success) throw new DomainError('validation_error', 'Neplatné id');
+    const b = body(z.object({ subject: z.string().min(3).max(200).optional(), body: z.string().min(10).max(8000).optional() }).strict(), req);
+    const row = (await app.db.query<any>('select q.number, q.status, q.customer_id, c.name from quotes q join customers c on c.id=q.customer_id where q.id=$1', [id.data]))[0];
+    if (!row) throw new DomainError('quote_not_found', 'Nabídka neexistuje');
+    if (!['ready', 'sent'].includes(row.status)) throw new DomainError('quote_not_ready', 'Odeslat lze jen nabídku ve stavu „připraveno“ (nebo znovu odeslat „odeslanou“)');
+    const actor = humanActor(me(req).user);
+    const sent = await runTool('send_email', {
+      customer_id: row.customer_id, quote_id: id.data, purpose: 'quote_delivery', attach_quote_pdf: true,
+      subject: b.subject ?? `Nabídka ${row.number}`,
+      body: b.body ?? `Dobrý den,\n\nv příloze zasíláme nabídku ${row.number}.\nPro případné dotazy nebo úpravy nás neváhejte kontaktovat.\n\nS pozdravem\nobchodní oddělení`,
+    }, actor);
+    if (sent.status !== 'ok') return sendResult(reply, sent);
+    const status = (sent.data as any).status as string;
+    if (status === 'sent' && row.status === 'ready') await runTool('update_quote', { quote_id: id.data, status: 'sent' }, actor);
+    return { email_id: (sent.data as any).email_id, email_status: status };
+  });
+  f.get(`${S}/customers`, async (req) => { const p = paging(req); return admin.listCustomers(app.db, q(req).q, p.limit, p.offset); });
+  f.get(`${S}/customers/:id`, async (req) => {
+    const id = uuid.safeParse((req.params as any).id); if (!id.success) throw new DomainError('validation_error', 'Neplatné id');
+    const r = await admin.getCustomer(app.db, id.data); if (!r) throw new DomainError('customer_not_found', 'Zákazník neexistuje'); return r;
   });
   f.get(`${S}/customers/:id/export`, async (req, reply) => {
     needAdmin(req);

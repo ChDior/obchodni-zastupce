@@ -55,3 +55,26 @@ export async function setFollowupStatus(db: Db, id: string, status: 'done' | 'ca
 export async function listEmails(db: Db, limit?: number) {
   return db.query(`select e.id, e.subject, e.purpose, e.status, e.transport, e.created_by, e.created_at, e.sent_at, c.name as customer_name from email_outbox e join customers c on c.id=e.customer_id order by e.created_at desc limit $1`, [Math.min(limit ?? 100, 500)]);
 }
+
+export async function listCustomers(db: Db, search?: string, limit?: number, offset?: number) {
+  const s = search?.trim();
+  return db.query(
+    `select c.id, c.name, c.company_name, c.email, c.phone, c.consent_marketing, c.erased_at, c.created_at,
+            (select count(*)::int from leads where customer_id=c.id) as leads, (select count(*)::int from quotes where customer_id=c.id) as quotes
+     from customers c ${s ? `where lower(c.name) like $3 or lower(coalesce(c.email,'')) like $3 or lower(coalesce(c.company_name,'')) like $3 or coalesce(c.ico,'') like $3` : ''}
+     order by c.created_at desc limit $1 offset $2`,
+    s ? [...page(limit, offset), `%${s.toLowerCase().replace(/[%_\\]/g, '')}%`] : page(limit, offset));
+}
+export async function getCustomer(db: Db, id: string) {
+  const c = await db.query<any>('select * from customers where id=$1', [id]);
+  if (!c.length) return null;
+  const by = (sql: string) => db.query(sql, [id]);
+  return {
+    customer: c[0],
+    leads: await by('select id, status, score, summary, created_at from leads where customer_id=$1 order by created_at desc'),
+    projects: await by('select id, name, status, area_m2, estimated_value_net::float8 as estimated_value_net from projects where customer_id=$1 order by created_at desc'),
+    quotes: await by('select id, number, status, total_net::float8 as total_net, total_gross::float8 as total_gross, created_at from quotes where customer_id=$1 order by created_at desc'),
+    followups: await by('select id, status, channel, purpose, due_at from followups where customer_id=$1 order by due_at desc'),
+    emails: await by('select id, subject, status, purpose, created_at from email_outbox where customer_id=$1 order by created_at desc'),
+  };
+}

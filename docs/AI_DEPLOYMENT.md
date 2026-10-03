@@ -17,6 +17,7 @@ Node.js ≥ 22. Instalace: `npm ci --legacy-peer-deps` (npm 10 má s některými
 | `INTERNAL_TOKEN` | n8n → `/api/internal/*` |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | přímé odesílání e-mailů přes SMTP (transport `smtp`, má přednost před n8n; `SMTP_FROM` povinné) |
 | `N8N_EMAIL_WEBHOOK` | pokud prázdné, e-maily se jen zapíší do `email_outbox` (transport `log`) |
+| `WIDGET_FRAME_ANCESTORS` | weby (origins oddělené mezerou), které smějí vložit `/widget` do iframe; prázdné = nikdo |
 | `TRUST_PROXY=true` | za reverzní proxy (správná IP pro rate limit) |
 | `SEED_DEMO` | vynucení/zákaz demo dat |
 
@@ -31,11 +32,15 @@ Za reverzní proxy (TLS) – aplikace sama TLS neterminuje.
 6. Ověřit na živém OpenAI klíči sadu reálných dotazů (viz AI_TESTING – manuální evaluace).
 
 ## n8n
+Hotové workflow k importu jsou v `n8n/` (follow-upy, GDPR retence; viz `n8n/README.md`, neověřeno proti živému n8n).
 - **Cron follow-upů:** workflow *Schedule Trigger* (např. každých 15 min) → *HTTP Request* `POST {host}/api/internal/followups/run-due`, hlavička `X-Internal-Token`. Splatné e-mailové follow-upy připraví COMMUNICATION agent (e-mail jde na schválení), ostatní vytvoří úkol ve „Ke schválení“.
 - **E-mail transport:** *Webhook* trigger přijme `{to, subject, body, ref}` → uzel SMTP/Gmail/Ecomail. Webhook URL do `N8N_EMAIL_WEBHOOK`. (Netestováno proti živému n8n.)
 
 ## Embed widgetu
-`/widget` je samostatná stránka s `X-Frame-Options: DENY`. Pro vložení do webu: buď odkaz/otevření v novém okně, nebo upravit `frame-ancestors`/`X-Frame-Options` v `src/server/app.ts` na povolené domény.
+`/widget` je výchozí `X-Frame-Options: DENY`. Pro vložení do webu nastavte `WIDGET_FRAME_ANCESTORS=https://www.beleta.cz` a vložte `<iframe src="https://ai.<doména>/widget" …>`; povolení platí jen pro `/widget`, administrace zůstává nevkládatelná.
+
+## Docker a CI
+`Dockerfile` (Node 22, data v `/data`, healthcheck `/healthz`): `docker build -t beleta-ai . && docker run -p 3000:3000 -v beleta-data:/data --env-file .env beleta-ai` (v produkci `NODE_ENV=production` vyžaduje `INTERNAL_TOKEN`, `PUBLIC_ORIGIN`, `ADMIN_*` při prvním startu). **Image nebyl sestaven ani spuštěn** (v sandboxu není Docker). `.github/workflows/ci.yml`: typecheck, testy, `npm audit --audit-level=high` (běží až po pushi na GitHub).
 
 ## Provozní poznámky
 Logy aplikace neobsahují PII; audit je v DB (`/ai-sales/activity`). Sledujte: počet `pending` schválení, chyby `llm_failure`, `max_steps`, stav integrity auditu.

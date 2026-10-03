@@ -47,14 +47,14 @@ Hotovo navíc: SMTP transport, PDF nabídek, GDPR (export/výmaz/retence), 2FA +
 | 1 | Živé ověření | ANTHROPIC klíč, sada reálných dotazů, ladění promptů (zatím jen simulovaní klienti); OpenAI/Ollama/n8n/SMTP živě netestováno | R-03, R-12, R-25, R-26 |
 | 2 | Skutečná data | reálný katalog/ceny/sklad/pravidla/doprava, technická dokumentace do KB; import z ERP | R-01, R-02, R-04 |
 | 3 | Databáze | adaptér `Db` nad `pg` (PostgreSQL server); PGlite = jedna instance | R-25 |
-| 4 | n8n | žádný exportovaný workflow (cron follow-upů, retence GDPR, e-mail webhook) – jen dokumentace | R-25, R-09 |
+| 4 | n8n | workflow v `n8n/` (follow-upy, retence) hotové, neověřeno naživo; chybí případný workflow pro inbound e-maily | R-25, R-09 |
 | 5 | Znalostní báze | OpenAI File Search / vektorové vyhledávání (lokální KB je lexikální) | R-02, R-25 |
-| 6 | Nabídky | číslování po letech, PDF jako příloha e-mailu, odeslání nabídky zákazníkovi jedním krokem | R-07, R-08 |
+| 6 | ~~Nabídky~~ ✅ | hotovo: číslování po letech, PDF příloha, odeslání jedním krokem z administrace | R-07, R-08 |
 | 7 | E-mail | příjem a zpracování odpovědí zákazníků (inbound), šablony | R-08, R-09 |
-| 8 | Administrace | stránka zákazníka (detail, GDPR tlačítka export/výmaz), editace katalogu/cen v UI, správa KB v UI | R-11 |
-| 9 | Widget | vložení do webu (iframe/`frame-ancestors`), sběr kontaktu před předáním člověku | R-03 |
+| 8 | Administrace | ✅ stránka zákazníků + GDPR tlačítka; chybí editace katalogu/cen v UI a správa KB v UI | R-11 |
+| 9 | Widget | ✅ vložení do webu (`WIDGET_FRAME_ANCESTORS`); chybí sběr kontaktu před předáním člověku | R-03 |
 | 10 | AI core | vytažení do samostatného balíčku pro CIHLICKY.CZ (zatím jen pravidlo bez importu domény) | R-15 |
-| 11 | Provoz | Dockerfile/CI (typecheck+test+audit závislostí), zálohy, monitoring, retence auditu, perzistentní rate limit | nefunkční |
+| 11 | Provoz | Dockerfile a CI přidány (neověřeno); chybí zálohy, monitoring, retence auditu, perzistentní rate limit | nefunkční |
 | 12 | Pozdější fáze (záměrně) | cold calling, hromadné e-maily, auto slevy, hledání příležitostí, hlas/telefon | R-20…R-24 |
 
 ## Kontrola proti původnímu zadání (INITIAL DEVELOPMENT TASK)

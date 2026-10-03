@@ -1,0 +1,9 @@
+{
+  "name": "BELETA AI SALES – follow-upy (každých 15 min)",
+  "nodes": [
+    { "parameters": { "rule": { "interval": [{ "field": "minutes", "minutesInterval": 15 }] } }, "name": "Každých 15 minut", "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1.2, "position": [0, 0] },
+    { "parameters": { "method": "POST", "url": "={{ $env.BELETA_AI_URL }}/api/internal/followups/run-due", "sendHeaders": true, "headerParameters": { "parameters": [{ "name": "X-Internal-Token", "value": "={{ $env.BELETA_INTERNAL_TOKEN }}" }] } }, "name": "Zpracovat splatné follow-upy", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [260, 0] }
+  ],
+  "connections": { "Každých 15 minut": { "main": [[{ "node": "Zpracovat splatné follow-upy", "type": "main", "index": 0 }]] } },
+  "settings": { "executionOrder": "v1" }
+}

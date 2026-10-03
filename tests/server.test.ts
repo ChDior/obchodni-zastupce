@@ -160,3 +160,18 @@ describe('RateLimiter', () => {
   });
 });
 void makeApp;
+
+describe('vložení widgetu', () => {
+  test('výchozí: nikdo nesmí vložit; s WIDGET_FRAME_ANCESTORS jen /widget a jen uvedené weby', async () => {
+    const a = await makeApp();
+    const closed = await buildServer(a, { publicOrigin: ORIGIN, secureCookies: false, trustProxy: false });
+    const r0 = await closed.inject('/widget');
+    expect(r0.headers['x-frame-options']).toBe('DENY'); expect(String(r0.headers['content-security-policy'])).toContain("frame-ancestors 'none'");
+    const open = await buildServer(a, { publicOrigin: ORIGIN, secureCookies: false, trustProxy: false, widgetFrameAncestors: ['https://www.beleta.cz'] });
+    const r1 = await open.inject('/widget');
+    expect(r1.headers['x-frame-options']).toBeUndefined(); expect(String(r1.headers['content-security-policy'])).toContain('frame-ancestors https://www.beleta.cz;');
+    const adminPage = await open.inject('/ai-sales');
+    expect(adminPage.headers['x-frame-options']).toBe('DENY'); expect(String(adminPage.headers['content-security-policy'])).toContain("frame-ancestors 'none'");
+    await closed.close(); await open.close();
+  });
+});

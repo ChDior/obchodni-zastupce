@@ -161,8 +161,10 @@ export async function createQuote(db: Db, policy: PolicyReader, i: QuoteInput, a
   if (i.project_id) { const p = await requireProject(db, i.project_id); if (p.customer_id !== i.customer_id) throw new DomainError('mismatch', 'Projekt patří jinému zákazníkovi'); }
   const priced = await priceQuote(db, policy, i, today);
   const validDays = Number(await policy.get('quote.valid_days', 14));
-  const seq = (await db.query<any>("select nextval('quote_number_seq') as n"))[0].n;
-  const number = `N-${today.getUTCFullYear()}-${String(seq).padStart(4, '0')}`;
+  const year = today.getUTCFullYear();
+  const seq = (await db.query<any>(
+    'insert into quote_counters (year, last) values ($1, 1) on conflict (year) do update set last = quote_counters.last + 1 returning last', [year]))[0].last;
+  const number = `N-${year}-${String(seq).padStart(4, '0')}`;
   const r = await db.query<any>(
     `insert into quotes (number, project_id, customer_id, status, currency, discount_pct, total_net, total_vat, total_gross, shipping_net,
        valid_until, earliest_delivery_date, requested_delivery_date, custom_terms, notes, created_by)
