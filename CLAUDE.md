@@ -4,7 +4,7 @@ Závazný základ pro každého, kdo (člověk i AI) v repozitáři pracuje.
 
 ## Co projekt je
 Modul autonomního AI obchodního zástupce pro BELETA Plus s.r.o. Autonomní ≠ bez kontroly.
-Podrobná specifikace: `MASTER_SPEC.md`. Architektura: `docs/AI_ARCHITECTURE.md`.
+Podrobná specifikace: `MASTER_SPEC.md`. Architektura: `docs/AI_ARCHITECTURE.md`. **Aktuální stav a další kroky: `docs/HANDOFF.md`.**
 
 ## Struktura
 - `src/ai-core/` – doménově nezávislé jádro (tool executor, guardrails, schvalování, audit, agent runtime, LLM provider). **Nesmí importovat `src/beleta` ani `src/server`** (hlídá test). Určeno k znovupoužití pro CIHLICKY.CZ.
