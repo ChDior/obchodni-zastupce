@@ -56,3 +56,19 @@ Hotovo navíc: SMTP transport, PDF nabídek, GDPR (export/výmaz/retence), 2FA +
 | 10 | AI core | vytažení do samostatného balíčku pro CIHLICKY.CZ (zatím jen pravidlo bez importu domény) | R-15 |
 | 11 | Provoz | Dockerfile/CI (typecheck+test+audit závislostí), zálohy, monitoring, retence auditu, perzistentní rate limit | nefunkční |
 | 12 | Pozdější fáze (záměrně) | cold calling, hromadné e-maily, auto slevy, hledání příležitostí, hlas/telefon | R-20…R-24 |
+
+## Kontrola proti původnímu zadání (INITIAL DEVELOPMENT TASK)
+Zadání bylo dodáno až dodatečně; předchozí `MASTER_SPEC.md` z něj byl jen zpětně sestaven. Skutečné rozdíly:
+
+| Bod zadání | Stav | Poznámka |
+|---|---|---|
+| Podklady v kořeni (`KNOWLEDGE_BASE.md`, `schema.sql`, `openapi.yaml`, `acceptance.md`, `START_HERE.md`, původní `sales-manager.md` / `technical-agent.md` / `calculation-agent.md`) | ⛔ nebyly k dispozici | Repozitář byl prázdný. Agenti v `agents/*.md` jsou naše vlastní prompty – je třeba je porovnat s dodanými a sloučit. Bez `acceptance.md` neověřeno proti akceptačním kritériím. |
+| Fáze 1: audit **existujícího** systému BELETA (framework, DB, admin, kalkulačka, objednávky, SEO, deploy, testy) | ⛔ neprovedeno | Existující BELETA systém v repozitáři není, takže `BELETA_CURRENT_ARCHITECTURE.md` popisuje jen nově vzniklý základ. |
+| „Nepřepisuj současný systém“, „použij existující BELETA API“, „UI respektuje současný design administrace“, „integrované BELETA CRM“ | ⛔ nesplněno | Postavili jsme samostatný systém. Integrace na existující web/ERP/CRM/databázi (ceny, produkty, kalkulačka) nebyla možná. |
+| Fáze 3: OpenAI API / Agents SDK, OpenAI File Search / vector store | 🟡 | Výchozí je Claude; OpenAI jen přes Chat Completions (ne Agents SDK); File Search chybí. |
+| Fáze 3: n8n | 🟡 | Jen rozhraní (webhook, cron endpointy); žádný hotový workflow. |
+| Postup „nejdřív návrh A–J ke schválení, až pak programovat“ | 🟡 | Návrh je v `AI_ARCHITECTURE.md`, ale implementace začala bez formálního schválení. |
+| Fáze 4–7, 9, 10 (tools, agenti, guardrails, approval, MVP, testy, dokumentace) | ✅ | 18 tools, 6 agentů, 12 povinných testů + další, 10 dokumentů. |
+| Fáze 8: administrace (dashboard + 6 sekcí) | ✅ | Ale vlastní design, ne převzatý. |
+| Jádro znovupoužitelné pro CIHLICKY.CZ, CIHLOVESTAVBY.CZ, BELETA.CZ | 🟡 | `src/ai-core` je doménově nezávislé, ale není samostatný balíček; třetí/čtvrtá doména (multi-tenant, jiné katalogy/prompty) neřešena. |
+| Objednávkový proces, obrázky produktů, SEO | ⛔ | Mimo to, co jsme postavili (viz bod o existujícím systému). |
