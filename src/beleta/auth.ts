@@ -47,3 +47,12 @@ export async function userForToken(db: Db, token: string | undefined): Promise<A
   return r[0] ?? null;
 }
 export async function logout(db: Db, token: string) { await db.query('delete from admin_sessions where token_hash=$1', [tokenHash(token)]); }
+
+/** Reset hesla (CLI): změní heslo a zneplatní všechny aktivní relace uživatele. */
+export async function resetPassword(db: Db, email: string, password: string): Promise<boolean> {
+  if (password.length < 12) throw new Error('Heslo musí mít alespoň 12 znaků');
+  const r = await db.query<any>(`update admin_users set password_hash=$2, active=true where lower(email)=lower($1) returning id`, [email, await hashPassword(password)]);
+  if (!r.length) return false;
+  await db.query('delete from admin_sessions where user_id=$1', [r[0].id]);
+  return true;
+}

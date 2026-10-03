@@ -11,6 +11,7 @@
     "dev": "node --env-file-if-exists=.env --import tsx --watch src/server/main.ts",
     "start": "node --env-file-if-exists=.env --import tsx src/server/main.ts",
     "seed": "node --env-file-if-exists=.env --import tsx src/beleta/seed-cli.ts",
+    "reset-password": "node --env-file-if-exists=.env --import tsx src/beleta/reset-password-cli.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
@@ -18,10 +19,12 @@
     "@anthropic-ai/sdk": "^0.131.0",
     "@electric-sql/pglite": "^0.5.8",
     "fastify": "^5.0.0",
+    "nodemailer": "^10.0.14",
     "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/nodemailer": "^8.0.2",
     "tsx": "^4.0.0",
     "typescript": "^5.6.0",
     "vitest": "^4.0.0"

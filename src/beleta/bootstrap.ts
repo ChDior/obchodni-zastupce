@@ -5,7 +5,7 @@ import { createAiCore, migrate, openPglite, runAgent, DomainError, redact,
 import { followupBotActor, webAdvisorActor } from './actors.js';
 import { loadAgents } from './agents.js';
 import { ensureAdmin } from './auth.js';
-import { LogTransport, N8nWebhookTransport, type EmailTransport } from './email.js';
+import { emailTransportFromEnv, type EmailTransport } from './email.js';
 import { LocalKnowledge, type KnowledgeProvider } from './knowledge.js';
 import { seedDemo } from './seed.js';
 import { buildTools } from './tools.js';
@@ -24,7 +24,7 @@ export async function bootstrap(opts: BootstrapOptions = {}) {
   if (opts.seedDemo !== false) await seedDemo(db, { knowledgeDir: join(ROOT, 'data/knowledge') });
   if (opts.admin) await ensureAdmin(db, opts.admin.email, opts.admin.password);
 
-  const emailTransport = opts.emailTransport ?? (process.env.N8N_EMAIL_WEBHOOK ? new N8nWebhookTransport(process.env.N8N_EMAIL_WEBHOOK) : new LogTransport());
+  const emailTransport = opts.emailTransport ?? emailTransportFromEnv();
   const core = createAiCore({ db, now: opts.now, log: opts.log, deps: { emailTransport } });
   core.deps.approvals = core.approvals;
   core.registry.register(...buildTools({ knowledge: opts.knowledge ?? new LocalKnowledge() }));
