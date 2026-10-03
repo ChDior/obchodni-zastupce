@@ -1,5 +1,6 @@
 # n8n workflow (importovat: Workflows → Import from File)
 - `followups-cron.json` – každých 15 min volá `POST /api/internal/followups/run-due`.
+- `scout-cron.json` – denně v 5:00 volá `POST /api/internal/scout/run` (běží jen při `scout.enabled=true` a v rámci měsíčních stropů).
 - `gdpr-retention-cron.json` – denně ve 3:00 volá `POST /api/internal/gdpr/retention`.
 
 V n8n nastavte proměnné prostředí `BELETA_AI_URL` (např. `https://ai.example.cz`) a `BELETA_INTERNAL_TOKEN` (= `INTERNAL_TOKEN` aplikace).
