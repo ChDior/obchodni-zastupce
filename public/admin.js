@@ -166,6 +166,7 @@ async function openQuote(r) {
     h('p', {}, `Doprava: ${fmt.money(Number(q.shipping_net))} · Sleva: ${q.discount_pct} % · Celkem bez DPH: `, h('b', {}, fmt.money(Number(q.total_net))), ` · s DPH: ${fmt.money(Number(q.total_gross))}`),
     q.custom_terms ? h('p', {}, 'Vlastní podmínky: ' + q.custom_terms) : null,
     h('div', { class: 'toolbar' }, user.role !== 'viewer' ? [h('button', { onclick: () => setStatus('ready') }, 'Připraveno'), h('button', { class: 'primary', onclick: () => setStatus('sent') }, 'Označit jako odeslanou'), h('button', { class: 'danger', onclick: () => setStatus('rejected') }, 'Zamítnuta')] : null,
+      h('button', { onclick: () => window.open('/api/admin' + S('/quotes/' + r.id + '/pdf'), '_blank', 'noopener') }, 'PDF'),
       h('button', { onclick: () => { dlg.close(); dlg.remove(); } }, 'Zavřít')));
   document.body.append(dlg); dlg.showModal();
 }

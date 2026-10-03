@@ -9,7 +9,8 @@ BELETA AI SALES pro BELETA Plus s.r.o. – autonomní AI obchodní zástupce s l
 - `src/beleta`: katalog, ceny, sklad, kalkulace (materiál/příslušenství/doprava), CRM, nabídky, e-mail (outbox, transport log/n8n), follow-upy, lokální znalostní báze; 18 tools; 6 agentů (SALES MANAGER bez datových nástrojů; prompty v `agents/*.md`).
 - Admin `/ai-sales` (dashboard, leady, projekty, nabídky, follow-upy, ke schválení, aktivita AI, pravidla AI) + chat `/widget` + REST `/api/public/*`.
 - E-mail: transport SMTP (`SMTP_*` v `.env`, má přednost před n8n), reset hesla admina (`npm run reset-password -- <email> <heslo>`; zneplatní relace).
-- 109 testů, typecheck čistý. Dokumentace v `docs/` (CURRENT_ARCHITECTURE, GAP_ANALYSIS, AI_*).
+- PDF nabídek (pdfkit, font DejaVu v `assets/fonts`, tlačítko v detailu nabídky) a GDPR (export, výmaz, retence – REST + `docs/AI_API.md`; UI tlačítka pro výmaz zatím nejsou).
+- 115 testů, typecheck čistý. Dokumentace v `docs/` (CURRENT_ARCHITECTURE, GAP_ANALYSIS, AI_*).
 - Windows: `start-windows.cmd` + `scripts/setup-windows.ps1` (instalace, `.env`, spuštění). Uživatel ho úspěšně spustil a je přihlášený do administrace.
 
 ## Rozhodnutí
@@ -23,7 +24,7 @@ BELETA AI SALES pro BELETA Plus s.r.o. – autonomní AI obchodní zástupce s l
 3. **Hosting**: uživatel má Vedos webhosting „No limit" (sdílený; Node.js pravděpodobně nepodporuje – ověřit u podpory). Alternativa: VPS (Vedos/Hetzner) pod `ai.<doména>`. Nasazení zatím neexistuje; potřeba: Node 22, trvalý proces, HTTPS proxy (nginx), `NODE_ENV=production`, `PUBLIC_ORIGIN`, silný `INTERNAL_TOKEN`.
 4. **PostgreSQL server** místo PGlite (adaptér `Db` nad `pg` není hotový) před provozem na více instancích.
 5. Logování reálné spotřeby tokenů a ceny do auditu/administrace (navrženo, neimplementováno).
-6. Dále: n8n workflow (cron follow-upů, e-mail webhook), PDF nabídek, GDPR (výmaz/retence), 2FA a správa uživatelů, OpenAI File Search adaptér pro KB, embed widgetu (X-Frame-Options), automatizované UI testy.
+6. Dále: n8n workflow (cron follow-upů, e-mail webhook), n8n cron pro `/api/internal/gdpr/retention`, 2FA a správa uživatelů, OpenAI File Search adaptér pro KB, embed widgetu (X-Frame-Options), automatizované UI testy.
 7. Ověřit na živém Windows `start-windows.cmd` ještě po změnách (opraveno: nutno rozbalit ZIP před spuštěním).
 
 ## Známá omezení

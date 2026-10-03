@@ -35,4 +35,8 @@
 CSP `default-src 'self'` (žádné inline skripty/styly), `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: no-referrer`, HSTS v produkci; admin UI vkládá data jen přes `textContent` (XSS); cookie HttpOnly+SameSite=Strict(+Secure v produkci); CSRF: vlastní hlavička + kontrola `Origin`; hesla scrypt, konstantní čas i pro neexistující účet; rate limit loginu (účet+IP), chatu a veřejného API; limit těla 64 kB; interní endpoint token (timing-safe), v produkci povinný; SQL výhradně parametrizovaně.
 
 ## Zbytková rizika / TODO
-Chybí 2FA, správa uživatelů v UI, retence a výmaz dat (GDPR), perzistentní rate limiting, penetrační test, skenování závislostí v CI.
+Chybí 2FA, správa uživatelů v UI, perzistentní rate limiting, penetrační test, skenování závislostí v CI.
+
+
+## GDPR
+Výmaz = anonymizace (`src/beleta/gdpr.ts`): řádek zákazníka zůstává (vazby, účetní integrita), osobní údaje, poznámky, e-maily v outboxu, konverzace a vstupy schválení se mažou/nulují. Audit je append-only a PII neobsahuje, hash řetěz zůstává platný; výmaz i export se auditují (`gdpr.erase`, `gdpr.export`) a evidují v `gdpr_erasures`. Retence řízena politikou `gdpr.retention_months`.

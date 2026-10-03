@@ -23,6 +23,9 @@ Veřejné API **nemá žádný zápisový endpoint**; zápisy dělá jen AI pře
 | PATCH | `…/leads/:id` `{status,…}` · `…/quotes/:id` `{status,…}` (tool `update_lead`/`update_quote` jako člověk; zákazy AI pro člověka neplatí) | admin, sales |
 | POST | `…/approvals/:id/approve|reject` `{note?}` | admin, sales |
 | POST | `…/followups/:id/done|cancel` | admin, sales |
+| GET | `…/quotes/:id/pdf` – PDF nabídky (`application/pdf`; nefinální stavy mají značku NÁVRH; hlavička a patička z politik `quote.pdf_seller`, `quote.pdf_footer`) | všechny |
+| GET | `…/customers/:id/export` – JSON všech údajů o zákazníkovi (GDPR přístup, auditováno) | admin |
+| POST | `…/customers/:id/erase` – anonymizace zákazníka (GDPR výmaz; 409 `already_erased`, auditováno) | admin |
 | PUT | `…/policies/:key` `{value}` (typ musí odpovídat) | admin |
 
 ## Stránky
@@ -30,6 +33,7 @@ Veřejné API **nemá žádný zápisový endpoint**; zápisy dělá jen AI pře
 
 ## Interní (n8n)
 | POST | `/api/internal/followups/run-due` | hlavička `X-Internal-Token` (= `INTERNAL_TOKEN`) → `{processed}` |
+| POST | `/api/internal/gdpr/retention` | stejný token → `{erased, disabled}`; anonymizuje zákazníky bez souhlasu a bez otevřené/přijaté nabídky a otevřených follow-upů, neaktivní déle než politika `gdpr.retention_months` (0 = vypnuto). Doporučeno volat z n8n cronem denně. |
 
 ## Poznámky ke kompatibilitě
 Nové API; žádná zpětná kompatibilita nebyla třeba. Další změny: přidávat pole/endpointy, neměnit významy existujících, a zapsat sem.

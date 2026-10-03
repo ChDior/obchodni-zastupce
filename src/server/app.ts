@@ -6,6 +6,8 @@ import { z } from 'zod';
 import { DomainError, type ToolResult } from '../ai-core/index.js';
 import { humanActor, publicActor } from '../beleta/actors.js';
 import * as admin from '../beleta/admin.js';
+import { eraseCustomer, exportCustomer, runRetention } from '../beleta/gdpr.js';
+import { renderQuotePdf } from '../beleta/quote-pdf.js';
 import { login, logout, userForToken, type AdminUser } from '../beleta/auth.js';
 import { ROOT, type Beleta } from '../beleta/bootstrap.js';
 import { RateLimiter } from './ratelimit.js';
@@ -27,7 +29,7 @@ const uuid = z.string().uuid();
 const STATUS_BY_CODE: Record<string, number> = {
   validation_error: 400, bad_message: 400, forbidden: 403, invalid_credentials: 401, unknown_tool: 404, not_found: 404,
   product_not_found: 404, price_not_found: 404, stock_unknown: 404, customer_not_found: 404, lead_not_found: 404, project_not_found: 404, quote_not_found: 404,
-  not_pending: 409, ai_unavailable: 503, denied: 403,
+  not_pending: 409, already_erased: 409, ai_unavailable: 503, denied: 403,
 };
 
 export async function buildServer(app: Beleta, cfg: ServerConfig) {
@@ -115,12 +117,18 @@ export async function buildServer(app: Beleta, cfg: ServerConfig) {
   });
 
   /* ---------- interní (n8n) ---------- */
+  const internalAuth = (req: FastifyRequest) => {
+    const a = Buffer.from(String(req.headers['x-internal-token'] ?? '')), b = Buffer.from(cfg.internalToken ?? '');
+    return !!cfg.internalToken && a.length === b.length && timingSafeEqual(a, b);
+  };
+  const unauthorized = (reply: FastifyReply) => reply.code(401).send({ error: { code: 'unauthorized', message: 'Neplatný token' } });
   f.post('/api/internal/followups/run-due', async (req, reply) => {
-    const tok = String(req.headers['x-internal-token'] ?? '');
-    const exp = cfg.internalToken ?? '';
-    const a = Buffer.from(tok), b = Buffer.from(exp);
-    if (!exp || a.length !== b.length || !timingSafeEqual(a, b)) return reply.code(401).send({ error: { code: 'unauthorized', message: 'Neplatný token' } });
+    if (!internalAuth(req)) return unauthorized(reply);
     return app.runDueFollowups();
+  });
+  f.post('/api/internal/gdpr/retention', async (req, reply) => {
+    if (!internalAuth(req)) return unauthorized(reply);
+    return runRetention(app.db, app.core.audit, Number(await app.core.policy.get('gdpr.retention_months', 0)));
   });
 
   /* ---------- administrace ---------- */
@@ -175,6 +183,23 @@ export async function buildServer(app: Beleta, cfg: ServerConfig) {
   f.get(`${S}/quotes/:id`, async (req) => {
     const id = uuid.safeParse((req.params as any).id); if (!id.success) throw new DomainError('validation_error', 'Neplatné id');
     const r = await admin.getQuote(app.db, id.data); if (!r) throw new DomainError('not_found', 'Nabídka neexistuje'); return r;
+  });
+  f.get(`${S}/quotes/:id/pdf`, async (req, reply) => {
+    const id = uuid.safeParse((req.params as any).id); if (!id.success) throw new DomainError('validation_error', 'Neplatné id');
+    const { filename, buffer } = await renderQuotePdf(app.db, app.core.policy, id.data);
+    return reply.type('application/pdf').header('content-disposition', `inline; filename="${filename}"`).send(buffer);
+  });
+  f.get(`${S}/customers/:id/export`, async (req, reply) => {
+    needAdmin(req);
+    const id = uuid.safeParse((req.params as any).id); if (!id.success) throw new DomainError('validation_error', 'Neplatné id');
+    const data = await exportCustomer(app.db, app.core.audit, id.data, humanActor(me(req).user).id);
+    return reply.header('content-disposition', `attachment; filename="zakaznik-${id.data}.json"`).send(data);
+  });
+  f.post(`${S}/customers/:id/erase`, async (req) => {
+    needAdmin(req);
+    const id = uuid.safeParse((req.params as any).id); if (!id.success) throw new DomainError('validation_error', 'Neplatné id');
+    await eraseCustomer(app.db, app.core.audit, id.data, humanActor(me(req).user).id);
+    return { ok: true };
   });
   f.get(`${S}/followups`, async (req) => { const p = paging(req); return admin.listFollowups(app.db, q(req).status, p.limit, p.offset); });
   f.get(`${S}/emails`, async (req) => admin.listEmails(app.db, paging(req).limit));
