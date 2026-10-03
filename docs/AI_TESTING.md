@@ -11,6 +11,7 @@
 | `tests/agents.test.ts` | manager bez datových nástrojů · whitelisty · prompty bez cen · ai-core bez závislosti na doméně · delegace, zdroje, prompt injection, max kroků, chat, kompletní nákupní scénář, OpenAI provider (mock fetch) |
 | `tests/llm-anthropic.test.ts` | Claude provider (převod zpráv, thinking bloky zpět beze změny, tool_result, refusal, chyba bez těla, fallbacks), agent runtime přes Claude, výběr poskytovatele z env |
 | `tests/server.test.ts` | veřejné API · login/CSRF/role/rate limit · cookie flagy · hlavičky · admin workflow včetně schválení · interní token |
+| `tests/ops.test.ts`, `tests/gdpr-pdf.test.ts`, `tests/auth2fa.test.ts`, `tests/usage.test.ts`, `tests/import.test.ts` | SMTP transport a reset hesla · PDF nabídky · GDPR export/výmaz/retence · TOTP/záložní kódy/správa uživatelů · účtování tokenů · import CSV (vše-nebo-nic, idempotence, napojení na tools) |
 
 Chybové stavy: neexistující entity, neplatné vstupy, nulové/záporné/obří hodnoty, chybějící data (cena, sklad, pravidla), cizí vazby, výpadek LLM/transportu, expirace, dvojí rozhodnutí.
 

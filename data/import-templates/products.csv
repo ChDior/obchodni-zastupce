@@ -1,0 +1,2 @@
+sku;name;description;category;unit;weight_kg;price_net;vat_rate;currency;stock_qty;lead_time_days;restock_date;attr_min_sklon_stupne
+PRIKLAD-01;Název produktu;Popis;krytina;ks;4,3;38,00;21;CZK;1000;14;;22

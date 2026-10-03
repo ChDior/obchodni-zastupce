@@ -3,10 +3,11 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { DomainError, type ToolResult } from '../ai-core/index.js';
+import { DomainError, usageReport, type LlmPricing, type ToolResult } from '../ai-core/index.js';
 import { humanActor, publicActor } from '../beleta/actors.js';
 import * as admin from '../beleta/admin.js';
 import { eraseCustomer, exportCustomer, runRetention } from '../beleta/gdpr.js';
+import { IMPORT_TYPES, deactivateDemo, importCsv, importHelp, type ImportType } from '../beleta/import-csv.js';
 import { renderQuotePdf } from '../beleta/quote-pdf.js';
 import { createUser, listUsers, login, logout, totpDisable, totpEnable, totpEnabledFor, totpSetup, updateUser, userForToken, type AdminUser } from '../beleta/auth.js';
 import { ROOT, type Beleta } from '../beleta/bootstrap.js';
@@ -14,7 +15,7 @@ import { RateLimiter } from './ratelimit.js';
 
 export interface ServerConfig {
   publicOrigin: string; internalToken?: string; secureCookies: boolean; trustProxy: boolean;
-  chatPerMinute?: number; loginMax?: number; publicPerMinute?: number;
+  llmPricing?: LlmPricing; chatPerMinute?: number; loginMax?: number; publicPerMinute?: number;
 }
 
 const COOKIE = 'beleta_session';
@@ -37,6 +38,7 @@ export async function buildServer(app: Beleta, cfg: ServerConfig) {
   const chatLimiter = new RateLimiter(cfg.chatPerMinute ?? 12, 60_000);
   const publicLimiter = new RateLimiter(cfg.publicPerMinute ?? 120, 60_000);
   const loginLimiter = new RateLimiter(cfg.loginMax ?? 8, 15 * 60_000);
+  f.addContentTypeParser(['text/csv', 'text/plain'], { parseAs: 'string', bodyLimit: 5 * 1024 * 1024 }, (_req, body, done) => done(null, body));
   const files = new Map<string, Buffer>();
   const file = (name: string) => { let b = files.get(name); if (!b) { b = readFileSync(join(ROOT, 'public', name)); files.set(name, b); } return b; };
 
@@ -236,6 +238,17 @@ export async function buildServer(app: Beleta, cfg: ServerConfig) {
     await auditHuman(req, 'user.update', id.data, { role: b.role, active: b.active, password_reset: b.password !== undefined, reset_2fa: b.reset_2fa });
     return { ok: true };
   });
+  f.get(`${S}/usage`, async (req) => usageReport(app.db, Number(q(req).days) || 30, cfg.llmPricing),
+  );
+  f.get(`${S}/import`, async (req) => { needAdmin(req); return { types: importHelp() }; });
+  f.post(`${S}/import/:type`, { bodyLimit: 5 * 1024 * 1024 }, async (req) => {
+    needAdmin(req);
+    const type = (req.params as any).type as string;
+    if (!(IMPORT_TYPES as readonly string[]).includes(type)) throw new DomainError('validation_error', 'Neznámý typ importu');
+    if (typeof req.body !== 'string') throw new DomainError('validation_error', 'Očekáváno tělo text/csv');
+    return importCsv(app.db, app.core.audit, type as ImportType, req.body, { dryRun: ['1', 'true'].includes(q(req).dry_run ?? ''), by: humanActor(me(req).user).id });
+  });
+  f.post(`${S}/demo/deactivate`, async (req) => { needAdmin(req); return { deactivated: await deactivateDemo(app.db, app.core.audit, humanActor(me(req).user).id) }; });
   f.get(`${S}/followups`, async (req) => { const p = paging(req); return admin.listFollowups(app.db, q(req).status, p.limit, p.offset); });
   f.get(`${S}/emails`, async (req) => admin.listEmails(app.db, paging(req).limit));
   f.get(`${S}/approvals`, async (req) => app.core.approvals.list(app.db, q(req).status, paging(req).limit));

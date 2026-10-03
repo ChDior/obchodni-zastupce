@@ -13,6 +13,7 @@ Node.js ≥ 22. Instalace: `npm ci --legacy-peer-deps` (npm 10 má s některými
 | `LLM_PROVIDER` | `anthropic` \| `openai` \| `none`; prázdné = Anthropic, pokud je `ANTHROPIC_API_KEY`, jinak OpenAI |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` (výchozí `claude-opus-5-5`; levnější `claude-sonnet-5-5`), `ANTHROPIC_EFFORT`, `ANTHROPIC_FALLBACKS` | Claude. Klíč: console.anthropic.com → API keys |
 | `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_BASE_URL` | OpenAI (alternativa); bez jakéhokoli klíče chat vrací 503 |
+| `LLM_PRICE_INPUT_USD_PER_MTOK`, `LLM_PRICE_OUTPUT_USD_PER_MTOK` (+ `_CACHE_READ_`, `_CACHE_WRITE_`) | volitelně ceny modelu pro odhad nákladů na stránce „Spotřeba AI“; bez nich se ukazují jen tokeny |
 | `INTERNAL_TOKEN` | n8n → `/api/internal/*` |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | přímé odesílání e-mailů přes SMTP (transport `smtp`, má přednost před n8n; `SMTP_FROM` povinné) |
 | `N8N_EMAIL_WEBHOOK` | pokud prázdné, e-maily se jen zapíší do `email_outbox` (transport `log`) |
@@ -22,7 +23,7 @@ Node.js ≥ 22. Instalace: `npm ci --legacy-peer-deps` (npm 10 má s některými
 Za reverzní proxy (TLS) – aplikace sama TLS neterminuje.
 
 ## Před ostrým provozem (povinné)
-1. **Import skutečného katalogu, cen, skladu, kalkulačních pravidel a dopravy** do `products/prices/stock/calc_rules/accessory_rules/shipping_*` (z ERP/CSV; skript není součástí baseline). Demo (`DEMO-*`) neponechávat.
+1. **Import skutečného katalogu, cen, skladu, kalkulačních pravidel a dopravy** z CSV: `npm run import -- <typ> <soubor.csv> [--dry-run]` (šablony a pravidla v `data/import-templates/README.md`), poté `npm run import -- deactivate-demo`. Přímý import z ERP zatím není.
 2. Nahrát technickou dokumentaci do KB (`upsertDocument`, viz `src/beleta/knowledge.ts`); demo dokumenty nahradit.
 3. **PostgreSQL server:** PGlite je jednoprocesové. Implementujte `Db` nad `pg` (`query`, `tx`, `close`; transakce přes dedikované spojení) a `audit.record` nechte běžet v transakci – SQL je standardní PostgreSQL. Do doby, než adaptér vznikne, provozujte jednu instanci.
 4. Změnit výchozí hesla/tokeny; nastavit politiky v `/ai-sales/policies` (nechat konzervativní, tj. `discount.max_auto_pct=0`, `email.ai_auto_send=false`).

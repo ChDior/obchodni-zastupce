@@ -26,3 +26,7 @@ PostgreSQL dialekt (`gen_random_uuid`, JSONB, plpgsql trigger). Migrace v `db/co
 - Sloupce `date` vrací driver jako `Date` – používejte `dateStr()`.
 - Katalog (`products/prices/stock`) je **zdrojem pravdy pro AI**; plní ho import z ERP, ne AI. Demo seed jen mimo produkci.
 - Indexy: základní; při růstu přidat trigramový/FTS index na `products.search_text`.
+
+
+## Novější migrace
+`db/core/002_llm_usage.sql` (`ai_llm_usage` – tokeny a model per volání LLM, bez obsahu) · `db/beleta/004_gdpr_pdf.sql` (`customers.erased_at`, `gdpr_erasures`, politiky `gdpr.retention_months`, `quote.pdf_*`) · `db/beleta/005_2fa_users.sql` (TOTP sloupce v `admin_users`).

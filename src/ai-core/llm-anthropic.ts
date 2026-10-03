@@ -42,10 +42,13 @@ export class AnthropicProvider implements LlmProvider {
       throw new Error(`LLM HTTP ${(err as { status?: number }).status ?? 'error'}`);
     }
     const blocks: any[] = res.content ?? [];
-    if (res.stop_reason === 'refusal') return { content: REFUSAL_TEXT, tool_calls: [] };
+    const u = res.usage;
+    const usage = u ? { input_tokens: u.input_tokens ?? 0, output_tokens: u.output_tokens ?? 0, cache_read_tokens: u.cache_read_input_tokens ?? 0, cache_write_tokens: u.cache_creation_input_tokens ?? 0 } : undefined;
+    const model = res.model ?? this.cfg.model;
+    if (res.stop_reason === 'refusal') return { content: REFUSAL_TEXT, tool_calls: [], usage, model };
     const text = blocks.filter((b) => b.type === 'text').map((b) => b.text).join('');
     const tool_calls = blocks.filter((b) => b.type === 'tool_use').map((b) => ({ id: b.id, name: b.name, arguments: JSON.stringify(b.input ?? {}) }));
-    return { content: text || null, tool_calls, raw: blocks };
+    return { content: text || null, tool_calls, raw: blocks, usage, model };
   }
 }
 

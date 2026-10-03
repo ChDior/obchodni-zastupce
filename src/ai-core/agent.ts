@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { redact } from './redact.js';
+import { recordLlmUsage } from './usage.js';
 import type { AiCore } from './index.js';
 import type { BaseContext } from './executor.js';
 import type { LlmMessage, LlmProvider, LlmToolSpec } from './llm.js';
@@ -39,6 +40,8 @@ export async function runAgent(def: AgentDef, history: LlmMessage[], p: RunParam
 
   for (let step = 0; step < maxSteps; step++) {
     const resp = await llm.complete({ system: def.instructions, messages, tools: toolSpecs });
+    // účetnictví spotřeby nesmí shodit konverzaci
+    await recordLlmUsage(base.db, { request_id: base.requestId, conversation_id: base.conversationId, agent: def.name, model: resp.model, usage: resp.usage }).catch(() => {});
     if (!resp.tool_calls.length) {
       return { reply: resp.content ?? '', sources: dedupe(sources), trace, approvalIds };
     }

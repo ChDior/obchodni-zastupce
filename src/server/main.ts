@@ -1,5 +1,6 @@
 import { bootstrap } from '../beleta/bootstrap.js';
 import { buildServer } from './app.js';
+import { pricingFromEnv } from '../ai-core/index.js';
 import { createLlmFromEnv } from './llm-config.js';
 
 const env = process.env;
@@ -14,7 +15,7 @@ const app = await bootstrap({
 });
 const server = await buildServer(app, {
   publicOrigin: env.PUBLIC_ORIGIN ?? `http://localhost:${env.PORT ?? 3000}`, internalToken: env.INTERNAL_TOKEN,
-  secureCookies: production, trustProxy: env.TRUST_PROXY === 'true',
+  llmPricing: pricingFromEnv(env), secureCookies: production, trustProxy: env.TRUST_PROXY === 'true',
 });
 await server.listen({ port: Number(env.PORT ?? 3000), host: env.HOST ?? '0.0.0.0' });
 console.log(`BELETA AI SALES běží na portu ${env.PORT ?? 3000} (AI: ${llmLabel})`);

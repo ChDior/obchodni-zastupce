@@ -7,14 +7,14 @@ Výchozí kategorie vždy **C** (nebo **E**). „Nyní“: ✅ hotovo, 🟡 čá
 
 | Req | Požadavek | Výchozí | Požadovaný stav | Návrh řešení | Riziko | Priorita | Nyní |
 |---|---|---|---|---|---|---|---|
-| R-01 | Produktové vyhledávání | C | Hledání bez diakritiky, detail, cena, sklad | `products/prices/stock`, tools search/get_product/get_price/check_stock, REST `/api/public/products` | Kvalita dat katalogu (import z ERP) | Vysoká | ✅ (demo data) · ⛔ import ERP |
+| R-01 | Produktové vyhledávání | C | Hledání bez diakritiky, detail, cena, sklad | `products/prices/stock`, tools search/get_product/get_price/check_stock, REST `/api/public/products` | Kvalita dat katalogu (import z ERP) | Vysoká | ✅ import z CSV (`npm run import`) · ⛔ skutečná data a import z ERP |
 | R-02 | Znalostní báze | C | Dokumentace se zdroji | `kb_*`, `search_knowledge`, `KnowledgeProvider` | Lexikální vyhledávání < vector store | Vysoká | 🟡 lokální; OpenAI File Search jako adaptér |
 | R-03 | Webový AI poradce | C | Chat se zdroji, historií | `/api/public/chat`, `/widget`, SALES MANAGER | Prompt injection, náklady, zneužití | Vysoká | ✅ (nutný `OPENAI_API_KEY`) |
 | R-04 | Kalkulace | C | Z pravidel v DB | `calc_rules`, `accessory_rules`, shipping | Chybná pravidla v DB = chybné množství | Vysoká | ✅ |
 | R-05 | Lead + kvalifikace | C | Serverové skóre | `create_lead/update_lead`, `scoreLead` | Pravidla skóre jsou odhad – doladit | Střední | ✅ |
 | R-06 | CRM projekt | C | Projekt navázaný na zákazníka/lead | `projects`, tools | — | Střední | ✅ |
-| R-07 | Nabídka | C | Ceny/sklad/doprava z DB, guardrails | `create_quote/update_quote`, `priceQuote`, guard | Chybí PDF, číslování per rok | Vysoká | 🟡 bez PDF |
-| R-08 | E-mail | C | Jen zákazníkům z CRM, se schvalováním | `send_email`, outbox, `EmailTransport` | Reálný transport netestován | Střední | 🟡 log/n8n |
+| R-07 | Nabídka | C | Ceny/sklad/doprava z DB, guardrails | `create_quote/update_quote`, `priceQuote`, guard | Číslování per rok, PDF jako příloha e-mailu | Vysoká | 🟡 PDF hotové (admin), bez přílohy a bez číslování per rok |
+| R-08 | E-mail | C | Jen zákazníkům z CRM, se schvalováním | `send_email`, outbox, `EmailTransport` | Reálný transport netestován | Střední | 🟡 SMTP/n8n/log; netestováno živě, bez příloh, bez příjmu odpovědí |
 | R-09 | Follow-up | C | Plánování + zpracování splatných | `create_followup`, `runDueFollowups`, n8n cron | Spam zákazníkům – limity | Střední | ✅ |
 | R-10 | Audit | C | Append-only, bez PII | `ai_audit_log`, hash řetěz, `redact` | Retence/objem logu | Vysoká | ✅ |
 | R-11 | Administrace | C | Dashboard + 6 sekcí | `/ai-sales/*` | Design nenavazuje (neexistoval) | Střední | ✅ |
@@ -31,8 +31,28 @@ Výchozí kategorie vždy **C** (nebo **E**). „Nyní“: ✅ hotovo, 🟡 čá
 | R-22 | Auto slevy | E | — | `discount.max_auto_pct`=0; rozšířit až s matricí slev | Marže | Nízká | ⛔ záměrně |
 | R-23 | Hledání příležitostí | E | — | Nový agent + zdroje dat | — | Nízká | ⛔ |
 | R-24 | Hlas/telefon | E | — | Realtime API + stejné tools | — | Nízká | ⛔ |
-| R-25 | OpenAI / n8n / PostgreSQL | C | Dle zadání | provider, webhook, SQL | PGlite ≠ produkční PG | Vysoká | 🟡 |
+| R-25 | OpenAI / n8n / PostgreSQL | C | Dle zadání | provider, webhook, SQL | PGlite ≠ produkční PG | Vysoká | 🟡 SMTP, n8n webhook a PG/PGlite hotové; ⛔ `pg` adaptér, ⛔ hotové n8n workflow, ⛔ živé ověření |
 | R-26 | Testy | C | 12 scénářů + chyby | 94+ testů | — | Vysoká | ✅ |
 | R-27 | Dokumentace | C | 8 dokumentů + audit | `docs/` | — | Střední | ✅ |
 
 **D – nutno změnit:** nic (nebylo co měnit). Budoucí změny nad rámec baseline: PGlite → PostgreSQL server; lokální KB → OpenAI File Search; demo seed → ERP import.
+
+
+## Doplněno po baseline (stav k poslednímu commitu)
+Hotovo navíc: SMTP transport, PDF nabídek, GDPR (export/výmaz/retence), 2FA + správa uživatelů, reset hesla CLI, logování spotřeby tokenů (`/ai-sales/usage`), import CSV (katalog, ceny, sklad, kalkulace, doprava).
+
+## Co stále chybí (podle `MASTER_SPEC.md`; původní zadání v repozitáři není, viz poznámka v MASTER_SPEC)
+| # | Oblast | Chybí | Souvisí |
+|---|---|---|---|
+| 1 | Živé ověření | ANTHROPIC klíč, sada reálných dotazů, ladění promptů (zatím jen simulovaní klienti); OpenAI/Ollama/n8n/SMTP živě netestováno | R-03, R-12, R-25, R-26 |
+| 2 | Skutečná data | reálný katalog/ceny/sklad/pravidla/doprava, technická dokumentace do KB; import z ERP | R-01, R-02, R-04 |
+| 3 | Databáze | adaptér `Db` nad `pg` (PostgreSQL server); PGlite = jedna instance | R-25 |
+| 4 | n8n | žádný exportovaný workflow (cron follow-upů, retence GDPR, e-mail webhook) – jen dokumentace | R-25, R-09 |
+| 5 | Znalostní báze | OpenAI File Search / vektorové vyhledávání (lokální KB je lexikální) | R-02, R-25 |
+| 6 | Nabídky | číslování po letech, PDF jako příloha e-mailu, odeslání nabídky zákazníkovi jedním krokem | R-07, R-08 |
+| 7 | E-mail | příjem a zpracování odpovědí zákazníků (inbound), šablony | R-08, R-09 |
+| 8 | Administrace | stránka zákazníka (detail, GDPR tlačítka export/výmaz), editace katalogu/cen v UI, správa KB v UI | R-11 |
+| 9 | Widget | vložení do webu (iframe/`frame-ancestors`), sběr kontaktu před předáním člověku | R-03 |
+| 10 | AI core | vytažení do samostatného balíčku pro CIHLICKY.CZ (zatím jen pravidlo bez importu domény) | R-15 |
+| 11 | Provoz | Dockerfile/CI (typecheck+test+audit závislostí), zálohy, monitoring, retence auditu, perzistentní rate limit | nefunkční |
+| 12 | Pozdější fáze (záměrně) | cold calling, hromadné e-maily, auto slevy, hledání příležitostí, hlas/telefon | R-20…R-24 |

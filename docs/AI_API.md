@@ -28,6 +28,8 @@ Veřejné API **nemá žádný zápisový endpoint**; zápisy dělá jen AI pře
 | POST | `…/customers/:id/erase` – anonymizace zákazníka (GDPR výmaz; 409 `already_erased`, auditováno) | admin |
 | POST | `/api/admin/2fa/setup` → `{secret, otpauth_uri}` · `/2fa/enable` `{code}` → `{recovery_codes}` (zobrazí se jen jednou) · `/2fa/disable` `{password, code}` | přihlášený (sám sobě) |
 | GET/POST/PATCH | `…/users`, `…/users/:id` `{role?,active?,password?,reset_2fa?,name?}` – nelze zablokovat/degradovat sebe ani posledního aktivního admina; změna hesla/role, deaktivace a reset 2FA ukončí relace uživatele | admin |
+| GET | `…/usage?days=30` – skutečná spotřeba tokenů LLM (celkem, po dnech, po agentech; `cost_usd` jen při nastavených `LLM_PRICE_*`) | všechny |
+| GET/POST | `…/import` (popis sloupců) · `…/import/:type?dry_run=1` (`products|calc_rules|accessory_rules|shipping_zones|shipping_rates`, tělo `text/csv`, max 5 MB, vše-nebo-nic) · `…/demo/deactivate` | admin |
 | PUT | `…/policies/:key` `{value}` (typ musí odpovídat) | admin |
 
 ## Stránky

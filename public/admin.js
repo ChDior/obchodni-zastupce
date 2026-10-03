@@ -41,7 +41,7 @@ const chip = (s) => h('span', { class: 'chip ' + tone(s) }, s);
 
 const PAGES = [
   ['', 'Dashboard'], ['/leads', 'Leady'], ['/projects', 'Projekty'], ['/quotes', 'Nabídky'], ['/followups', 'Follow-up'],
-  ['/approvals', 'Ke schválení'], ['/activity', 'Aktivita AI'], ['/policies', 'Pravidla AI'], ['/security', 'Zabezpečení'],
+  ['/approvals', 'Ke schválení'], ['/activity', 'Aktivita AI'], ['/usage', 'Spotřeba AI'], ['/policies', 'Pravidla AI'], ['/security', 'Zabezpečení'],
 ];
 const path = () => location.pathname.replace(/\/+$/, '').slice(BASE.length);
 function go(p) { history.pushState({}, '', BASE + p); render(); }
@@ -140,6 +140,20 @@ const views = {
         { label: 'Výsledek', render: (r) => chip(r.status) }, { label: 'Kód', render: (r) => r.error_code || '' },
         { label: 'Entita', render: (r) => r.entity_type ? `${r.entity_type}:${String(r.entity_id).slice(0, 8)}` : '' }, { label: 'ms', num: true, render: (r) => r.duration_ms ?? '' },
       ], rows, (r) => showJson('Záznam #' + r.id, r)));
+  },
+  async '/usage' () {
+    const d = new URLSearchParams(location.search).get('days') || '30';
+    const r = await api(S('/usage?days=' + encodeURIComponent(d)));
+    const num = (n) => new Intl.NumberFormat('cs-CZ').format(Math.round(n || 0));
+    const usd = (n) => (n == null ? '–' : '$' + n.toFixed(n < 1 ? 3 : 2));
+    const cols = (first) => [first, { label: 'Volání', num: true, render: (x) => num(x.calls) }, { label: 'Vstup', num: true, render: (x) => num(x.input) },
+      { label: 'Výstup', num: true, render: (x) => num(x.output) }, { label: 'Cache čtení', num: true, render: (x) => num(x.cache_read) }, { label: 'Cena', num: true, render: (x) => usd(x.cost_usd) }];
+    const sel = h('select', { onchange: (e) => { history.pushState({}, '', BASE + '/usage?days=' + e.target.value); render(); } }, ['7', '30', '90'].map((v) => h('option', { value: v, selected: v === d }, 'Posledních ' + v + ' dní')));
+    return h('div', {}, h('h2', {}, 'Spotřeba AI (tokeny)'), h('div', { class: 'toolbar' }, sel),
+      r.pricing_configured ? null : h('p', { class: 'muted' }, 'Ceny modelu nejsou nastavené (LLM_PRICE_* v .env) – zobrazují se jen počty tokenů.'),
+      h('p', {}, `Volání LLM: ${num(r.total.calls)} · konverzací: ${r.conversations} · odhad ceny: ${usd(r.total.cost_usd)}` + (r.avg_cost_per_conversation_usd != null ? ` · na konverzaci: ${usd(r.avg_cost_per_conversation_usd)}` : '')),
+      h('h3', {}, 'Podle agenta'), table(cols({ label: 'Agent', key: 'agent' }), r.by_agent),
+      h('h3', {}, 'Podle dne'), table(cols({ label: 'Den', key: 'day' }), r.by_day));
   },
   async '/security' () {
     const me = (await api('/me')).user;

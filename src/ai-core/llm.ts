@@ -9,7 +9,8 @@ export interface LlmMessage {
 }
 export interface LlmToolSpec { name: string; description: string; parameters: object }
 export interface LlmRequest { system: string; messages: LlmMessage[]; tools: LlmToolSpec[] }
-export interface LlmResponse { content: string | null; tool_calls: LlmToolCall[]; raw?: unknown }
+export interface LlmUsage { input_tokens: number; output_tokens: number; cache_read_tokens?: number; cache_write_tokens?: number }
+export interface LlmResponse { content: string | null; tool_calls: LlmToolCall[]; raw?: unknown; usage?: LlmUsage; model?: string }
 
 /** Provider-agnostní rozhraní. AI nikdy nedrží obchodní data – jen volá nástroje. */
 export interface LlmProvider { complete(req: LlmRequest): Promise<LlmResponse> }
@@ -45,6 +46,8 @@ export class OpenAIProvider implements LlmProvider {
     return {
       content: msg?.content ?? null,
       tool_calls: (msg?.tool_calls ?? []).map((c: any) => ({ id: c.id, name: c.function.name, arguments: c.function.arguments })),
+      model: this.cfg.model,
+      usage: j.usage ? { input_tokens: j.usage.prompt_tokens ?? 0, output_tokens: j.usage.completion_tokens ?? 0 } : undefined,
     };
   }
 }
