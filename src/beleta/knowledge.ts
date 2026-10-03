@@ -1,4 +1,4 @@
-import type { Db } from '../ai-core/index.js';
+import { DomainError, type Db } from '../ai-core/index.js';
 import { norm } from './util.js';
 
 /** Rozhraní znalostní báze. Lokální implementace = Postgres + lexikální skórování.
@@ -48,4 +48,41 @@ export class LocalKnowledge implements KnowledgeProvider {
     }).filter((h) => h.score > 0);
     return hits.sort((a, b) => b.score - a.score).slice(0, limit);
   }
+}
+
+/* ---------- správa dokumentů (administrace) ---------- */
+export async function listDocuments(db: Db) {
+  return db.query(`select d.id, d.title, d.category, d.source, d.active, d.updated_at, length(d.content)::int as chars,
+    (select count(*)::int from kb_chunks c where c.document_id=d.id) as chunks from kb_documents d order by d.title`);
+}
+export async function getDocument(db: Db, id: string) {
+  return (await db.query<any>('select id, title, category, source, active, content, updated_at from kb_documents where id=$1', [id]))[0] ?? null;
+}
+/** Vytvoření (id=null) nebo úprava dokumentu včetně přegenerování úseků. Název je unikátní. */
+export async function saveDocument(db: Db, id: string | null, d: { title: string; content: string; category?: string; active?: boolean }) {
+  return db.tx(async (t) => {
+    const dup = await t.query<any>('select id from kb_documents where title=$1', [d.title]);
+    if (dup.length && dup[0].id !== id) throw new DomainError('title_exists', 'Dokument s tímto názvem už existuje');
+    let docId: string;
+    if (id) {
+      const r = await t.query<any>(`update kb_documents set title=$2, content=$3, category=$4, active=coalesce($5, active), updated_at=now() where id=$1 returning id`,
+        [id, d.title, d.content, d.category ?? 'general', d.active ?? null]);
+      if (!r.length) throw new DomainError('not_found', 'Dokument neexistuje');
+      docId = r[0].id;
+    } else {
+      docId = (await t.query<any>(`insert into kb_documents (title, content, category, source, active) values ($1,$2,$3,'admin',$4) returning id`, [d.title, d.content, d.category ?? 'general', d.active ?? true]))[0].id;
+    }
+    await t.query('delete from kb_chunks where document_id=$1', [docId]);
+    let ord = 0;
+    for (const c of chunkText(d.content)) await t.query('insert into kb_chunks (document_id, ord, content, norm) values ($1,$2,$3,$4)', [docId, ord++, c, norm(c)]);
+    return { id: docId, chunks: ord };
+  });
+}
+export async function setDocumentActive(db: Db, id: string, active: boolean) {
+  const r = await db.query('update kb_documents set active=$2, updated_at=now() where id=$1 returning id', [id, active]);
+  if (!r.length) throw new DomainError('not_found', 'Dokument neexistuje');
+}
+export async function deleteDocument(db: Db, id: string) {
+  const r = await db.query('delete from kb_documents where id=$1 returning id', [id]); // úseky mizí kaskádou
+  if (!r.length) throw new DomainError('not_found', 'Dokument neexistuje');
 }

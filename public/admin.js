@@ -40,7 +40,7 @@ const tone = (s) => ({ approved: 'ok', executed: 'ok', success: 'ok', sent: 'ok'
 const chip = (s) => h('span', { class: 'chip ' + tone(s) }, s);
 
 const PAGES = [
-  ['', 'Dashboard'], ['/leads', 'Leady'], ['/projects', 'Projekty'], ['/quotes', 'Nabídky'], ['/customers', 'Zákazníci'], ['/products', 'Katalog'], ['/followups', 'Follow-up'],
+  ['', 'Dashboard'], ['/leads', 'Leady'], ['/projects', 'Projekty'], ['/quotes', 'Nabídky'], ['/customers', 'Zákazníci'], ['/products', 'Katalog'], ['/kb', 'Znalostní báze'], ['/followups', 'Follow-up'],
   ['/approvals', 'Ke schválení'], ['/activity', 'Aktivita AI'], ['/usage', 'Spotřeba AI'], ['/policies', 'Pravidla AI'], ['/security', 'Zabezpečení'],
 ];
 const path = () => location.pathname.replace(/\/+$/, '').slice(BASE.length);
@@ -164,6 +164,14 @@ const views = {
       table([{ label: 'SKU', key: 'sku' }, { label: 'Název', key: 'name' }, { label: 'Kategorie', key: 'category' }, { label: 'Jedn.', key: 'unit' },
         { label: 'Cena bez DPH', num: true, render: (r) => (r.price_net == null ? h('span', { class: 'chip bad' }, 'bez ceny') : fmt.money(r.price_net)) },
         { label: 'Sklad', num: true, render: (r) => (r.stock_qty == null ? '–' : r.stock_qty) }, { label: 'Aktivní', render: (r) => (r.active ? 'ano' : 'ne') }], rows, (r) => openProduct(r.id)));
+  },
+  async '/kb' () {
+    const rows = await api(S('/kb')); const edit = user.role === 'admin';
+    return h('div', {}, h('h2', {}, 'Znalostní báze (technická dokumentace)'),
+      h('p', { class: 'muted' }, 'Z těchto dokumentů AI čerpá technické informace a uvádí je jako zdroj. Neaktivní dokumenty AI nevidí. Ceny, sklad a termíny sem nepatří – ty jsou v katalogu.'),
+      edit ? h('div', { class: 'toolbar' }, h('button', { class: 'primary', onclick: () => openDoc(null) }, 'Nový dokument')) : null,
+      table([{ label: 'Název', key: 'title' }, { label: 'Kategorie', key: 'category' }, { label: 'Zdroj', key: 'source' }, { label: 'Znaků', num: true, key: 'chars' }, { label: 'Úseků', num: true, key: 'chunks' },
+        { label: 'Aktivní', render: (r) => (r.active ? 'ano' : h('span', { class: 'chip warn' }, 'ne')) }, { label: 'Upraveno', render: (r) => fmt.dt(r.updated_at) }], rows, (r) => openDoc(r.id)));
   },
   async '/usage' () {
     const d = new URLSearchParams(location.search).get('days') || '30';
@@ -305,6 +313,26 @@ async function openProduct(id) {
     d.accessories.length ? [h('h4', {}, 'Příslušenství (změny přes import CSV)'), table([{ label: 'SKU', key: 'sku' }, { label: 'Název', key: 'name' }, { label: 'Základ', key: 'basis' }, { label: 'Koef.', num: true, key: 'factor' }], d.accessories)] : null,
     d.prices.length ? [h('h4', {}, 'Historie cen'), table([{ label: 'Od', render: (x) => fmt.d(x.valid_from) }, { label: 'Do', render: (x) => fmt.d(x.valid_to) }, { label: 'Ceník', key: 'price_list' }, { label: 'Bez DPH', num: true, render: (x) => fmt.money(x.amount_net) }], d.prices)] : null,
     h('div', { class: 'toolbar' }, edit ? h('button', { class: 'primary', onclick: save }, 'Uložit') : null, h('button', { onclick: () => { dlg.close(); dlg.remove(); } }, 'Zavřít')));
+  document.body.append(dlg); dlg.showModal();
+}
+
+async function openDoc(id) {
+  const d = id ? await api(S('/kb/' + id)) : { title: '', category: 'technical', content: '', active: true };
+  const edit = user.role === 'admin';
+  const title = h('input', { value: d.title, disabled: !edit }), cat = h('input', { value: d.category, disabled: !edit });
+  const content = h('textarea', { rows: '16', disabled: !edit }, d.content);
+  const active = h('input', { type: 'checkbox', checked: !!d.active, disabled: !edit });
+  const file = h('input', { type: 'file', accept: '.md,.txt,text/plain,text/markdown', onchange: async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    if (f.size > 500000) { toast('Soubor je příliš velký (max. 500 kB textu)'); return; }
+    content.value = await f.text(); if (!title.value) title.value = f.name.replace(/\.[^.]+$/, '');
+  } });
+  const save = async () => { try { await api(S(id ? '/kb/' + id : '/kb'), { method: id ? 'PUT' : 'POST', body: { title: title.value, category: cat.value || 'general', content: content.value, active: active.checked } }); toast('Uloženo'); dlg.close(); dlg.remove(); render(); } catch (e) { toast(e.message); } };
+  const del = async () => { if (!confirm('Smazat dokument „' + d.title + '“? Nelze vrátit.')) return; try { await api(S('/kb/' + id), { method: 'DELETE' }); toast('Smazáno'); dlg.close(); dlg.remove(); render(); } catch (e) { toast(e.message); } };
+  const dlg = h('dialog', {}, h('h3', {}, id ? d.title : 'Nový dokument'),
+    h('div', { class: 'form' }, h('label', {}, 'Název'), title, h('label', {}, 'Kategorie'), cat, h('label', {}, 'Aktivní'), active, edit ? [h('label', {}, 'Načíst ze souboru (.md, .txt)'), file] : null, h('label', {}, 'Text'), content),
+    h('p', { class: 'muted' }, 'Text se dělí na úseky po odstavcích (prázdný řádek). Pište jeden fakt na odstavec a uvádějte název produktu.'),
+    h('div', { class: 'toolbar' }, edit ? h('button', { class: 'primary', onclick: save }, 'Uložit') : null, edit && id ? h('button', { class: 'danger', onclick: del }, 'Smazat') : null, h('button', { onclick: () => { dlg.close(); dlg.remove(); } }, 'Zavřít')));
   document.body.append(dlg); dlg.showModal();
 }
 

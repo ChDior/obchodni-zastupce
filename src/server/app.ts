@@ -8,6 +8,7 @@ import { humanActor, publicActor } from '../beleta/actors.js';
 import * as admin from '../beleta/admin.js';
 import { eraseCustomer, exportCustomer, runRetention } from '../beleta/gdpr.js';
 import { getProductAdmin, listProducts, saveProduct } from '../beleta/catalog-admin.js';
+import { deleteDocument, getDocument, listDocuments, saveDocument, setDocumentActive } from '../beleta/knowledge.js';
 import { IMPORT_TYPES, deactivateDemo, importCsv, importHelp, type ImportType } from '../beleta/import-csv.js';
 import { renderQuotePdf } from '../beleta/quote-pdf.js';
 import { createUser, listUsers, login, logout, totpDisable, totpEnable, totpEnabledFor, totpSetup, updateUser, userForToken, type AdminUser } from '../beleta/auth.js';
@@ -31,7 +32,7 @@ const uuid = z.string().uuid();
 const STATUS_BY_CODE: Record<string, number> = {
   validation_error: 400, bad_message: 400, forbidden: 403, invalid_credentials: 401, unknown_tool: 404, not_found: 404,
   product_not_found: 404, price_not_found: 404, stock_unknown: 404, customer_not_found: 404, lead_not_found: 404, project_not_found: 404, quote_not_found: 404,
-  not_pending: 409, already_erased: 409, user_exists: 409, sku_exists: 409, quote_not_ready: 409, totp_required: 401, invalid_code: 400, totp_already_enabled: 409, totp_not_enabled: 409, ai_unavailable: 503, denied: 403,
+  not_pending: 409, already_erased: 409, user_exists: 409, title_exists: 409, sku_exists: 409, quote_not_ready: 409, totp_required: 401, invalid_code: 400, totp_already_enabled: 409, totp_not_enabled: 409, ai_unavailable: 503, denied: 403,
 };
 
 export async function buildServer(app: Beleta, cfg: ServerConfig) {
@@ -39,6 +40,12 @@ export async function buildServer(app: Beleta, cfg: ServerConfig) {
   const chatLimiter = new RateLimiter(cfg.chatPerMinute ?? 12, 60_000);
   const publicLimiter = new RateLimiter(cfg.publicPerMinute ?? 120, 60_000);
   const loginLimiter = new RateLimiter(cfg.loginMax ?? 8, 15 * 60_000);
+  // prázdné tělo s Content-Type: application/json (UI posílá hlavičku i u POST/DELETE bez těla) není chyba
+  f.removeContentTypeParser('application/json');
+  f.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, raw, done) => {
+    if (raw === '') return done(null, undefined);
+    try { done(null, JSON.parse(raw as string)); } catch { const e: any = new Error('Neplatný JSON'); e.statusCode = 400; done(e, undefined); }
+  });
   f.addContentTypeParser(['text/csv', 'text/plain'], { parseAs: 'string', bodyLimit: 5 * 1024 * 1024 }, (_req, body, done) => done(null, body));
   const files = new Map<string, Buffer>();
   const file = (name: string) => { let b = files.get(name); if (!b) { b = readFileSync(join(ROOT, 'public', name)); files.set(name, b); } return b; };
@@ -284,6 +291,25 @@ export async function buildServer(app: Beleta, cfg: ServerConfig) {
     const id = uuid.safeParse((req.params as any).id); if (!id.success) throw new DomainError('validation_error', 'Neplatné id');
     return saveProduct(app.db, app.core.audit, id.data, body(productBody, req), humanActor(me(req).user).id);
   });
+  const kbBody = z.object({ title: z.string().min(2).max(200), content: z.string().min(10).max(500_000), category: z.string().min(1).max(60).optional(), active: z.boolean().optional() }).strict();
+  const kbId = (req: FastifyRequest) => { const id = uuid.safeParse((req.params as any).id); if (!id.success) throw new DomainError('validation_error', 'Neplatné id'); return id.data; };
+  const kbAudit = (req: FastifyRequest, action: string, id: string, output?: unknown) =>
+    app.core.audit.record(app.db, { actor_type: 'human', actor_id: humanActor(me(req).user).id, action, status: 'success', entity_type: 'kb_document', entity_id: id, output });
+  f.get(`${S}/kb`, async () => listDocuments(app.db));
+  f.get(`${S}/kb/:id`, async (req) => { const r = await getDocument(app.db, kbId(req)); if (!r) throw new DomainError('not_found', 'Dokument neexistuje'); return r; });
+  f.post(`${S}/kb`, { bodyLimit: 1024 * 1024 }, async (req) => {
+    needAdmin(req); const b = body(kbBody, req);
+    const r = await saveDocument(app.db, null, b); await kbAudit(req, 'kb.create', r.id, { title: b.title, chunks: r.chunks }); return r;
+  });
+  f.put(`${S}/kb/:id`, { bodyLimit: 1024 * 1024 }, async (req) => {
+    needAdmin(req); const id = kbId(req); const b = body(kbBody, req);
+    const r = await saveDocument(app.db, id, b); await kbAudit(req, 'kb.update', id, { title: b.title, chunks: r.chunks }); return r;
+  });
+  f.post(`${S}/kb/:id/active`, async (req) => {
+    needAdmin(req); const id = kbId(req); const b = body(z.object({ active: z.boolean() }).strict(), req);
+    await setDocumentActive(app.db, id, b.active); await kbAudit(req, 'kb.active', id, { active: b.active }); return { ok: true };
+  });
+  f.delete(`${S}/kb/:id`, async (req) => { needAdmin(req); const id = kbId(req); await deleteDocument(app.db, id); await kbAudit(req, 'kb.delete', id); return { ok: true }; });
   f.get(`${S}/import`, async (req) => { needAdmin(req); return { types: importHelp() }; });
   f.post(`${S}/import/:type`, { bodyLimit: 5 * 1024 * 1024 }, async (req) => {
     needAdmin(req);
