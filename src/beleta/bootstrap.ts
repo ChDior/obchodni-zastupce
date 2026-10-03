@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { ROOT } from './paths.js';
-import { createAiCore, migrate, openPglite, runAgent, DomainError, redact,
+import { createAiCore, migrate, openPg, openPglite, runAgent, DomainError, redact,
   type AiCore, type Db, type LlmProvider, type LlmMessage, type Source } from '../ai-core/index.js';
 import { followupBotActor, webAdvisorActor } from './actors.js';
 import { loadAgents } from './agents.js';
@@ -14,12 +14,12 @@ import { randomUUID } from 'node:crypto';
 export { ROOT };
 
 export interface BootstrapOptions {
-  db?: Db; dataDir?: string; llm?: LlmProvider; emailTransport?: EmailTransport; knowledge?: KnowledgeProvider;
+  db?: Db; dataDir?: string; databaseUrl?: string; llm?: LlmProvider; emailTransport?: EmailTransport; knowledge?: KnowledgeProvider;
   now?: () => Date; seedDemo?: boolean; admin?: { email: string; password: string }; log?: (m: string, e?: unknown) => void;
 }
 
 export async function bootstrap(opts: BootstrapOptions = {}) {
-  const db = opts.db ?? await openPglite(opts.dataDir);
+  const db = opts.db ?? (opts.databaseUrl ? await openPg(opts.databaseUrl) : await openPglite(opts.dataDir));
   await migrate(db, [join(ROOT, 'db/core'), join(ROOT, 'db/beleta')]);
   if (opts.seedDemo !== false) await seedDemo(db, { knowledgeDir: join(ROOT, 'data/knowledge') });
   if (opts.admin) await ensureAdmin(db, opts.admin.email, opts.admin.password);

@@ -9,7 +9,7 @@ if (production && (!env.INTERNAL_TOKEN || env.INTERNAL_TOKEN.length < 24)) throw
 
 const { llm, label: llmLabel } = createLlmFromEnv(env);
 const app = await bootstrap({
-  dataDir: env.DATA_DIR ?? '.data/pg', llm, seedDemo: env.SEED_DEMO ? env.SEED_DEMO === 'true' : !production,
+  dataDir: env.DATA_DIR ?? '.data/pg', databaseUrl: env.DATABASE_URL || undefined, llm, seedDemo: env.SEED_DEMO ? env.SEED_DEMO === 'true' : !production,
   admin: env.ADMIN_EMAIL && env.ADMIN_PASSWORD ? { email: env.ADMIN_EMAIL, password: env.ADMIN_PASSWORD } : undefined,
   log: (m, e) => console.error(m, e instanceof Error ? e.message : ''),
 });

@@ -1,10 +1,13 @@
+import { openPg } from '../src/ai-core/index.js';
 import { bootstrap, type Beleta } from '../src/beleta/bootstrap.js';
 import { humanActor, webAdvisorActor, publicActor } from '../src/beleta/actors.js';
 import type { Actor, LlmProvider, ToolResult } from '../src/ai-core/index.js';
 import { randomUUID } from 'node:crypto';
 
 export async function makeApp(opts: { llm?: LlmProvider; now?: () => Date } = {}): Promise<Beleta> {
-  return bootstrap({ seedDemo: true, now: opts.now ?? (() => new Date('2026-10-02T10:00:00Z')), llm: opts.llm,
+  // TEST_DATABASE_URL: celá sada běží proti skutečnému PostgreSQL (každá aplikace v izolovaném schématu)
+  const db = process.env.TEST_DATABASE_URL ? await openPg(process.env.TEST_DATABASE_URL, { schema: 't_' + randomUUID().replace(/-/g, ''), dropSchemaOnClose: true }) : undefined;
+  return bootstrap({ db, seedDemo: true, now: opts.now ?? (() => new Date('2026-10-02T10:00:00Z')), llm: opts.llm,
     admin: { email: 'admin@test.cz', password: 'test-password-123' } });
 }
 

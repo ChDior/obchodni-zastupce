@@ -8,6 +8,7 @@ Node.js ≥ 22. Instalace: `npm ci --legacy-peer-deps` (npm 10 má s některými
 |---|---|
 | `NODE_ENV=production` | zapíná Secure cookie, HSTS, vyžaduje `INTERNAL_TOKEN` ≥ 24 znaků, vypíná demo seed |
 | `PUBLIC_ORIGIN` | přesný origin administrace (kontrola Origin proti CSRF) |
+| `DATABASE_URL` | PostgreSQL server (produkce, více instancí); bez něj se použije PGlite v `DATA_DIR` |
 | `DATA_DIR` | adresář PGlite (perzistence); **zálohovat** |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` (≥12 znaků) | vytvoří prvního admina, pokud žádný není |
 | `LLM_PROVIDER` | `anthropic` \| `openai` \| `none`; prázdné = Anthropic, pokud je `ANTHROPIC_API_KEY`, jinak OpenAI |
@@ -26,7 +27,7 @@ Za reverzní proxy (TLS) – aplikace sama TLS neterminuje.
 ## Před ostrým provozem (povinné)
 1. **Import skutečného katalogu, cen, skladu, kalkulačních pravidel a dopravy** z CSV: `npm run import -- <typ> <soubor.csv> [--dry-run]` (šablony a pravidla v `data/import-templates/README.md`), poté `npm run import -- deactivate-demo`. Přímý import z ERP zatím není.
 2. Nahrát technickou dokumentaci do KB (`upsertDocument`, viz `src/beleta/knowledge.ts`); demo dokumenty nahradit.
-3. **PostgreSQL server:** PGlite je jednoprocesové. Implementujte `Db` nad `pg` (`query`, `tx`, `close`; transakce přes dedikované spojení) a `audit.record` nechte běžet v transakci – SQL je standardní PostgreSQL. Do doby, než adaptér vznikne, provozujte jednu instanci.
+3. **PostgreSQL server:** nastavte `DATABASE_URL=postgres://uživatel:heslo@host:5432/db` (má přednost před `DATA_DIR`/PGlite); migrace se aplikují při startu. Ověřeno na PostgreSQL 16 celou sadou testů (`TEST_DATABASE_URL=… npm test`) včetně souběžného zápisu auditu a rozhodování o schválení. Zálohy: `pg_dump`. Pozor: rate limiter je stále v paměti procesu (limity se při více instancích sčítají zvlášť) – před více instancemi dejte limity i na proxy.
 4. Změnit výchozí hesla/tokeny; nastavit politiky v `/ai-sales/policies` (nechat konzervativní, tj. `discount.max_auto_pct=0`, `email.ai_auto_send=false`).
 5. Zálohy DB + export posledního `hash` auditu do externího úložiště.
 6. Ověřit na živém OpenAI klíči sadu reálných dotazů (viz AI_TESTING – manuální evaluace).

@@ -1,6 +1,7 @@
 import { PGlite } from '@electric-sql/pglite';
 import { mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import pg from 'pg';
 import type { Db } from './types.js';
 
 class PgliteDb implements Db {
@@ -15,6 +16,46 @@ class PgliteDb implements Db {
     return this.pg.transaction(async (t) => fn(new PgliteDb(this.pg, t as any)));
   }
   async close() { await this.pg.close(); }
+}
+
+// node-pg: int8 → number (bigserial id, count), date → řetězec RRRR-MM-DD (bez posunu časovou zónou serveru)
+const pgTypes = { getTypeParser: (oid: number, fmt?: any) => (oid === 20 ? (v: string) => Number(v) : oid === 1082 ? (v: string) => v : pg.types.getTypeParser(oid, fmt)) } as any;
+
+class PgDb implements Db {
+  constructor(private pool: pg.Pool, private client?: pg.PoolClient) {}
+  async query<T = any>(sql: string, params: unknown[] = []): Promise<T[]> {
+    return (await (this.client ?? this.pool).query({ text: sql, values: params as any[], types: pgTypes })).rows as T[];
+  }
+  async tx<T>(fn: (db: Db) => Promise<T>): Promise<T> {
+    if (this.client) return fn(this); // už jsme v transakci – spojíme do vnější
+    const c = await this.pool.connect();
+    try {
+      await c.query('begin');
+      const r = await fn(new PgDb(this.pool, c));
+      await c.query('commit');
+      return r;
+    } catch (e) {
+      await c.query('rollback').catch(() => {});
+      throw e;
+    } finally { c.release(); }
+  }
+  async close() { await this.pool.end(); }
+}
+
+/** PostgreSQL server (produkce, více instancí). `schema` = izolovaný schéma (testy); `dropSchemaOnClose` ho při zavření smaže. */
+export async function openPg(url: string, opts: { schema?: string; dropSchemaOnClose?: boolean; max?: number } = {}): Promise<Db> {
+  if (opts.schema && !/^[a-z_][a-z0-9_]*$/.test(opts.schema)) throw new Error('Neplatný název schématu');
+  const base = new pg.Pool({ connectionString: url, max: 2 });
+  if (opts.schema) await base.query(`create schema if not exists ${opts.schema}`);
+  await base.end();
+  const pool = new pg.Pool({ connectionString: url, max: opts.max ?? 10, ...(opts.schema ? { options: `-c search_path=${opts.schema}` } : {}) });
+  pool.on('error', () => { /* odpojení nečinného spojení nesmí shodit proces */ });
+  const db = new PgDb(pool);
+  await db.query('select 1');
+  if (!opts.dropSchemaOnClose || !opts.schema) return db;
+  const close = db.close.bind(db);
+  db.close = async () => { await db.query(`drop schema ${opts.schema} cascade`).catch(() => {}); await close(); };
+  return db;
 }
 
 /** dataDir prázdné = in-memory. */

@@ -13,7 +13,8 @@ BELETA AI SALES pro BELETA Plus s.r.o. – autonomní AI obchodní zástupce s l
 - 2FA (TOTP + záložní kódy) a správa uživatelů (`/ai-sales/users`, `/ai-sales/security`).
 - Import CSV (`npm run import`, šablony `data/import-templates/`, REST `/import/:typ`) a logování tokenů (`ai_llm_usage`, stránka Spotřeba AI; ceny volitelně `LLM_PRICE_*`).
 - Nabídky: číslování po letech, odeslání e-mailem s PDF přílohou (tool i tlačítko v administraci); stránka Zákazníci s GDPR tlačítky; vložení widgetu (`WIDGET_FRAME_ANCESTORS`); `Dockerfile`, CI (`.github/workflows`), n8n workflow v `n8n/` (Docker/CI/n8n neověřeno).
-- 136 testů, typecheck čistý. Dokumentace v `docs/` (CURRENT_ARCHITECTURE, GAP_ANALYSIS, AI_*).
+- PostgreSQL server (`DATABASE_URL`, adaptér `openPg`): sada testů prošla na PG 16; při tom opraveno rozvětvení hash řetězu auditu při souběhu (advisory lock).
+- 138 testů (2 z nich jen s `TEST_DATABASE_URL`), typecheck čistý. Dokumentace v `docs/` (CURRENT_ARCHITECTURE, GAP_ANALYSIS, AI_*).
 - Windows: `start-windows.cmd` + `scripts/setup-windows.ps1` (instalace, `.env`, spuštění). Uživatel ho úspěšně spustil a je přihlášený do administrace.
 
 ## Rozhodnutí
@@ -25,12 +26,12 @@ BELETA AI SALES pro BELETA Plus s.r.o. – autonomní AI obchodní zástupce s l
 1. **Klíč Anthropic** v `.env` (`ANTHROPIC_API_KEY`) → první zkouška chatu na živém API, sada reálných dotazů, doladění promptů (zatím jen simulovaní klienti).
 2. **Reálná data**: katalog, ceny, sklad, kalkulační pravidla, doprava (zatím jen ukázková `DEMO-*`), technická dokumentace do KB; ukázkové dokumenty jsou smyšlené. Import z CSV je hotový, chybí jen napojení na ERP a samotná reálná data.
 3. **Hosting**: uživatel má Vedos webhosting „No limit" (sdílený; Node.js pravděpodobně nepodporuje – ověřit u podpory). Alternativa: VPS (Vedos/Hetzner) pod `ai.<doména>`. Nasazení zatím neexistuje; potřeba: Node 22, trvalý proces, HTTPS proxy (nginx), `NODE_ENV=production`, `PUBLIC_ORIGIN`, silný `INTERNAL_TOKEN`.
-4. **PostgreSQL server** místo PGlite (adaptér `Db` nad `pg` není hotový) před provozem na více instancích.
+4. (hotovo) PostgreSQL server – nastavte `DATABASE_URL`; zbývá rate limiter v paměti procesu.
 5. (hotovo) Logování spotřeby tokenů – po prvním živém běhu doplňte `LLM_PRICE_*` podle ceníku modelu.
 6. Dále: n8n workflow (cron follow-upů, e-mail webhook), n8n cron pro `/api/internal/gdpr/retention`, OpenAI File Search adaptér pro KB, embed widgetu (X-Frame-Options), automatizované UI testy.
 7. Ověřit na živém Windows `start-windows.cmd` ještě po změnách (opraveno: nutno rozbalit ZIP před spuštěním).
 
 ## Známá omezení
-PGlite = jedna instance; rate limiter in-memory; lokální KB lexikální; OpenAI/Ollama/n8n/SMTP netestováno živě; Ollama v sandboxu nešlo stáhnout (síťová politika), ověřeno jen simulovaným serverem.
+PGlite = jedna instance (pro více instancí použijte `DATABASE_URL`); rate limiter in-memory; lokální KB lexikální; OpenAI/Ollama/n8n/SMTP netestováno živě; Ollama v sandboxu nešlo stáhnout (síťová politika), ověřeno jen simulovaným serverem.
 
 Úplný přehled toho, co ještě chybí vůči `MASTER_SPEC.md`: `docs/BELETA_AI_GAP_ANALYSIS.md` (sekce „Co stále chybí“).

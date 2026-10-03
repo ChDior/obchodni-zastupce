@@ -46,7 +46,7 @@ Hotovo navíc: SMTP transport, PDF nabídek, GDPR (export/výmaz/retence), 2FA +
 |---|---|---|---|
 | 1 | Živé ověření | ANTHROPIC klíč, sada reálných dotazů, ladění promptů (zatím jen simulovaní klienti); OpenAI/Ollama/n8n/SMTP živě netestováno | R-03, R-12, R-25, R-26 |
 | 2 | Skutečná data | reálný katalog/ceny/sklad/pravidla/doprava, technická dokumentace do KB; import z ERP | R-01, R-02, R-04 |
-| 3 | Databáze | adaptér `Db` nad `pg` (PostgreSQL server); PGlite = jedna instance | R-25 |
+| 3 | ~~Databáze~~ ✅ | adaptér `pg` hotový a ověřen na PostgreSQL 16; zbývá rate limiter v paměti procesu | R-25 |
 | 4 | n8n | workflow v `n8n/` (follow-upy, retence) hotové, neověřeno naživo; chybí případný workflow pro inbound e-maily | R-25, R-09 |
 | 5 | Znalostní báze | OpenAI File Search / vektorové vyhledávání (lokální KB je lexikální) | R-02, R-25 |
 | 6 | ~~Nabídky~~ ✅ | hotovo: číslování po letech, PDF příloha, odeslání jedním krokem z administrace | R-07, R-08 |

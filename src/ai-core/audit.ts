@@ -43,7 +43,9 @@ export class AuditLog {
     const norm = (v: unknown) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
     const e: AuditEntry = { ...entry, input: norm(entry.input), output: norm(entry.output) };
     const run = async (t: Db) => {
-      const last = await t.query<{ hash: string }>('select hash from ai_audit_log order by id desc limit 1 for update');
+      // serializace zápisů řetězu (na skutečném PostgreSQL by dvě souběžné transakce vzaly stejný poslední hash a řetěz by se rozvětvil)
+      await t.query('select pg_advisory_xact_lock(7340001)');
+      const last = await t.query<{ hash: string }>('select hash from ai_audit_log order by id desc limit 1');
       const prev = last[0]?.hash ?? 'GENESIS';
       const ts = this.now().toISOString();
       const hash = hashRow(prev, ts, e);
