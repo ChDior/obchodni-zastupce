@@ -58,9 +58,9 @@ async function productId(t: Db, sku: string): Promise<string> {
   return r[0].id;
 }
 
-type RowFn = (t: Db, g: (c: string) => string | undefined, has: (c: string) => boolean, cols: string[]) => Promise<'created' | 'updated' | 'unchanged'>;
+export type RowFn = (t: Db, g: (c: string) => string | undefined, has: (c: string) => boolean, cols: string[]) => Promise<'created' | 'updated' | 'unchanged'>;
 
-const HANDLERS: Record<ImportType, RowFn> = {
+export const HANDLERS: Record<ImportType, RowFn> = {
   async products(t, g, has, cols) {
     const sku = g('sku')?.trim(); if (!sku) throw new Error('chybí sku');
     const ex = (await t.query<any>('select * from products where sku=$1', [sku]))[0];

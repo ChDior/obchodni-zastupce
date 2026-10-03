@@ -13,8 +13,9 @@ BELETA AI SALES pro BELETA Plus s.r.o. – autonomní AI obchodní zástupce s l
 - 2FA (TOTP + záložní kódy) a správa uživatelů (`/ai-sales/users`, `/ai-sales/security`).
 - Import CSV (`npm run import`, šablony `data/import-templates/`, REST `/import/:typ`) a logování tokenů (`ai_llm_usage`, stránka Spotřeba AI; ceny volitelně `LLM_PRICE_*`).
 - Nabídky: číslování po letech, odeslání e-mailem s PDF přílohou (tool i tlačítko v administraci); stránka Zákazníci s GDPR tlačítky; vložení widgetu (`WIDGET_FRAME_ANCESTORS`); `Dockerfile`, CI (`.github/workflows`), n8n workflow v `n8n/` (Docker/CI/n8n neověřeno).
+- Katalog v administraci (`/ai-sales/products`): úprava produktů, cen (s historií), skladu, parametrů a kalkulačního pravidla, jen admin, auditováno.
 - PostgreSQL server (`DATABASE_URL`, adaptér `openPg`): sada testů prošla na PG 16; při tom opraveno rozvětvení hash řetězu auditu při souběhu (advisory lock).
-- 138 testů (2 z nich jen s `TEST_DATABASE_URL`), typecheck čistý. Dokumentace v `docs/` (CURRENT_ARCHITECTURE, GAP_ANALYSIS, AI_*).
+- 142 testů (2 z nich jen s `TEST_DATABASE_URL`), typecheck čistý. Dokumentace v `docs/` (CURRENT_ARCHITECTURE, GAP_ANALYSIS, AI_*).
 - Windows: `start-windows.cmd` + `scripts/setup-windows.ps1` (instalace, `.env`, spuštění). Uživatel ho úspěšně spustil a je přihlášený do administrace.
 
 ## Rozhodnutí

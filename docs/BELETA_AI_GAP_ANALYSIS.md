@@ -51,7 +51,7 @@ Hotovo navíc: SMTP transport, PDF nabídek, GDPR (export/výmaz/retence), 2FA +
 | 5 | Znalostní báze | OpenAI File Search / vektorové vyhledávání (lokální KB je lexikální) | R-02, R-25 |
 | 6 | ~~Nabídky~~ ✅ | hotovo: číslování po letech, PDF příloha, odeslání jedním krokem z administrace | R-07, R-08 |
 | 7 | E-mail | příjem a zpracování odpovědí zákazníků (inbound), šablony | R-08, R-09 |
-| 8 | Administrace | ✅ stránka zákazníků + GDPR tlačítka; chybí editace katalogu/cen v UI a správa KB v UI | R-11 |
+| 8 | Administrace | ✅ stránka zákazníků + GDPR tlačítka; editace katalogu, cen, skladu a kalkulačních pravidel v UI hotová (příslušenství a doprava jen přes import CSV); chybí správa KB v UI | R-11 |
 | 9 | Widget | ✅ vložení do webu (`WIDGET_FRAME_ANCESTORS`); chybí sběr kontaktu před předáním člověku | R-03 |
 | 10 | AI core | vytažení do samostatného balíčku pro CIHLICKY.CZ (zatím jen pravidlo bez importu domény) | R-15 |
 | 11 | Provoz | Dockerfile a CI přidány (neověřeno); chybí zálohy, monitoring, retence auditu, perzistentní rate limit | nefunkční |

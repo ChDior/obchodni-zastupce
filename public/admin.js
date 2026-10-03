@@ -40,7 +40,7 @@ const tone = (s) => ({ approved: 'ok', executed: 'ok', success: 'ok', sent: 'ok'
 const chip = (s) => h('span', { class: 'chip ' + tone(s) }, s);
 
 const PAGES = [
-  ['', 'Dashboard'], ['/leads', 'Leady'], ['/projects', 'Projekty'], ['/quotes', 'Nabídky'], ['/customers', 'Zákazníci'], ['/followups', 'Follow-up'],
+  ['', 'Dashboard'], ['/leads', 'Leady'], ['/projects', 'Projekty'], ['/quotes', 'Nabídky'], ['/customers', 'Zákazníci'], ['/products', 'Katalog'], ['/followups', 'Follow-up'],
   ['/approvals', 'Ke schválení'], ['/activity', 'Aktivita AI'], ['/usage', 'Spotřeba AI'], ['/policies', 'Pravidla AI'], ['/security', 'Zabezpečení'],
 ];
 const path = () => location.pathname.replace(/\/+$/, '').slice(BASE.length);
@@ -152,6 +152,19 @@ const views = {
         { label: 'Kontakt', render: (r) => [r.email, r.phone].filter(Boolean).join(' · ') }, { label: 'Leady', num: true, key: 'leads' }, { label: 'Nabídky', num: true, key: 'quotes' },
         { label: 'Souhlas', render: (r) => (r.consent_marketing ? 'ano' : 'ne') }, { label: 'Vytvořen', render: (r) => fmt.d(r.created_at) }], rows, openCustomer));
   },
+  async '/products' () {
+    const p = new URLSearchParams(location.search);
+    const rows = await api(S('/products' + (p.get('q') ? '?q=' + encodeURIComponent(p.get('q')) : '')));
+    const search = h('input', { placeholder: 'SKU, název, kategorie', value: p.get('q') || '' });
+    const go2 = () => { history.pushState({}, '', BASE + '/products' + (search.value ? '?q=' + encodeURIComponent(search.value) : '')); render(); };
+    search.addEventListener('keydown', (e) => { if (e.key === 'Enter') go2(); });
+    return h('div', {}, h('h2', {}, 'Katalog a ceny'),
+      h('p', { class: 'muted' }, 'Zdroj pravdy pro AI. Změny cen a skladu jsou okamžitě platné a zapisují se do auditu. Upravovat smí jen administrátor.'),
+      h('div', { class: 'toolbar' }, search, h('button', { onclick: go2 }, 'Hledat'), user.role === 'admin' ? h('button', { class: 'primary', onclick: () => openProduct(null) }, 'Nový produkt') : null),
+      table([{ label: 'SKU', key: 'sku' }, { label: 'Název', key: 'name' }, { label: 'Kategorie', key: 'category' }, { label: 'Jedn.', key: 'unit' },
+        { label: 'Cena bez DPH', num: true, render: (r) => (r.price_net == null ? h('span', { class: 'chip bad' }, 'bez ceny') : fmt.money(r.price_net)) },
+        { label: 'Sklad', num: true, render: (r) => (r.stock_qty == null ? '–' : r.stock_qty) }, { label: 'Aktivní', render: (r) => (r.active ? 'ano' : 'ne') }], rows, (r) => openProduct(r.id)));
+  },
   async '/usage' () {
     const d = new URLSearchParams(location.search).get('days') || '30';
     const r = await api(S('/usage?days=' + encodeURIComponent(d)));
@@ -257,6 +270,41 @@ async function openCustomer(r) {
         if (prompt('Anonymizace je nevratná. Pro potvrzení napište ANONYMIZOVAT:') !== 'ANONYMIZOVAT') return;
         try { await api(S('/customers/' + c.id + '/erase'), { method: 'POST', body: {} }); toast('Zákazník anonymizován'); dlg.close(); dlg.remove(); render(); } catch (e) { toast(e.message); } } }, 'Anonymizovat (GDPR výmaz)') : null,
       h('button', { onclick: () => { dlg.close(); dlg.remove(); } }, 'Zavřít')));
+  document.body.append(dlg); dlg.showModal();
+}
+
+async function openProduct(id) {
+  const d = id ? await api(S('/products/' + id)) : { product: { sku: '', name: '', description: '', category: 'ostatni', unit: 'ks', weight_kg: 0, attributes: {}, active: true }, prices: [], stock: null, calc_rule: null, accessories: [] };
+  const pr = d.product; const cur = d.prices.find((x) => x.price_list === 'retail'); const edit = user.role === 'admin';
+  const f = (label, value, attrs = {}) => { const i = h('input', { value: value ?? '', disabled: !edit || attrs.disabled, ...attrs }); return [h('label', {}, label), i, i]; };
+  const sku = f('SKU', pr.sku, { disabled: !!id }), name = f('Název', pr.name), desc = h('textarea', { rows: '3', disabled: !edit }, pr.description || '');
+  const cat = f('Kategorie', pr.category), unit = f('Jednotka', pr.unit), weight = f('Hmotnost 1 jednotky (kg)', pr.weight_kg);
+  const active = h('input', { type: 'checkbox', checked: !!pr.active, disabled: !edit });
+  const attrs = h('textarea', { rows: '4', disabled: !edit }, JSON.stringify(pr.attributes || {}, null, 2));
+  const price = f('Cena bez DPH', cur?.amount_net), vat = f('DPH %', cur?.vat_rate ?? 21);
+  const stock = f('Skladem', d.stock?.qty_available), lead = f('Dodací lhůta (dny)', d.stock?.lead_time_days ?? 14);
+  const cr = d.calc_rule || {}; const cons = f('Spotřeba na m²', cr.consumption_per_m2), waste = f('Ztráty %', cr.waste_pct ?? 5), pack = f('Velikost balení', cr.pack_size ?? 1), packLabel = f('Název balení', cr.pack_label ?? 'ks');
+  const num = (el) => (el.value.trim() === '' ? undefined : Number(el.value.replace(',', '.')));
+  const save = async () => {
+    try {
+      const body = { name: name[1].value, description: desc.value, category: cat[1].value, unit: unit[1].value, weight_kg: num(weight[1]), active: active.checked };
+      if (!id) body.sku = sku[1].value;
+      try { body.attributes = JSON.parse(attrs.value || '{}'); } catch { toast('Parametry musí být platný JSON objekt'); return; }
+      if (num(price[1]) !== undefined) { body.price_net = num(price[1]); body.vat_rate = num(vat[1]); }
+      if (num(stock[1]) !== undefined) { body.stock_qty = num(stock[1]); body.lead_time_days = num(lead[1]); }
+      if (num(cons[1]) !== undefined) body.calc_rule = { consumption_per_m2: num(cons[1]), waste_pct: num(waste[1]), pack_size: num(pack[1]), pack_label: packLabel[1].value };
+      await api(S(id ? '/products/' + id : '/products'), { method: id ? 'PATCH' : 'POST', body });
+      toast('Uloženo'); dlg.close(); dlg.remove(); render();
+    } catch (e) { toast(e.message); }
+  };
+  const dlg = h('dialog', {}, h('h3', {}, id ? pr.sku : 'Nový produkt'),
+    h('div', { class: 'form' }, sku[0], sku[1], name[0], name[1], h('label', {}, 'Popis'), desc, cat[0], cat[1], unit[0], unit[1], weight[0], weight[1],
+      h('label', {}, 'Aktivní (nabízet zákazníkům)'), active, h('label', {}, 'Technické parametry (JSON)'), attrs,
+      h('h4', {}, 'Cena a sklad'), price[0], price[1], vat[0], vat[1], stock[0], stock[1], lead[0], lead[1],
+      h('h4', {}, 'Kalkulace materiálu'), cons[0], cons[1], waste[0], waste[1], pack[0], pack[1], packLabel[0], packLabel[1]),
+    d.accessories.length ? [h('h4', {}, 'Příslušenství (změny přes import CSV)'), table([{ label: 'SKU', key: 'sku' }, { label: 'Název', key: 'name' }, { label: 'Základ', key: 'basis' }, { label: 'Koef.', num: true, key: 'factor' }], d.accessories)] : null,
+    d.prices.length ? [h('h4', {}, 'Historie cen'), table([{ label: 'Od', render: (x) => fmt.d(x.valid_from) }, { label: 'Do', render: (x) => fmt.d(x.valid_to) }, { label: 'Ceník', key: 'price_list' }, { label: 'Bez DPH', num: true, render: (x) => fmt.money(x.amount_net) }], d.prices)] : null,
+    h('div', { class: 'toolbar' }, edit ? h('button', { class: 'primary', onclick: save }, 'Uložit') : null, h('button', { onclick: () => { dlg.close(); dlg.remove(); } }, 'Zavřít')));
   document.body.append(dlg); dlg.showModal();
 }
 

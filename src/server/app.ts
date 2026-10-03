@@ -7,6 +7,7 @@ import { DomainError, usageReport, type LlmPricing, type ToolResult } from '../a
 import { humanActor, publicActor } from '../beleta/actors.js';
 import * as admin from '../beleta/admin.js';
 import { eraseCustomer, exportCustomer, runRetention } from '../beleta/gdpr.js';
+import { getProductAdmin, listProducts, saveProduct } from '../beleta/catalog-admin.js';
 import { IMPORT_TYPES, deactivateDemo, importCsv, importHelp, type ImportType } from '../beleta/import-csv.js';
 import { renderQuotePdf } from '../beleta/quote-pdf.js';
 import { createUser, listUsers, login, logout, totpDisable, totpEnable, totpEnabledFor, totpSetup, updateUser, userForToken, type AdminUser } from '../beleta/auth.js';
@@ -30,7 +31,7 @@ const uuid = z.string().uuid();
 const STATUS_BY_CODE: Record<string, number> = {
   validation_error: 400, bad_message: 400, forbidden: 403, invalid_credentials: 401, unknown_tool: 404, not_found: 404,
   product_not_found: 404, price_not_found: 404, stock_unknown: 404, customer_not_found: 404, lead_not_found: 404, project_not_found: 404, quote_not_found: 404,
-  not_pending: 409, already_erased: 409, user_exists: 409, quote_not_ready: 409, totp_required: 401, invalid_code: 400, totp_already_enabled: 409, totp_not_enabled: 409, ai_unavailable: 503, denied: 403,
+  not_pending: 409, already_erased: 409, user_exists: 409, sku_exists: 409, quote_not_ready: 409, totp_required: 401, invalid_code: 400, totp_already_enabled: 409, totp_not_enabled: 409, ai_unavailable: 503, denied: 403,
 };
 
 export async function buildServer(app: Beleta, cfg: ServerConfig) {
@@ -264,6 +265,25 @@ export async function buildServer(app: Beleta, cfg: ServerConfig) {
   });
   f.get(`${S}/usage`, async (req) => usageReport(app.db, Number(q(req).days) || 30, cfg.llmPricing),
   );
+  const productBody = z.object({
+    sku: z.string().min(1).max(64).optional(), name: z.string().min(1).max(300).optional(), description: z.string().max(5000).optional(),
+    category: z.string().min(1).max(60).optional(), unit: z.string().min(1).max(20).optional(), weight_kg: z.number().min(0).max(100000).optional(), active: z.boolean().optional(),
+    attributes: z.record(z.string().max(60), z.union([z.string().max(500), z.number(), z.boolean()])).optional(),
+    price_net: z.number().min(0).max(1e9).optional(), vat_rate: z.number().min(0).max(100).optional(), currency: z.string().length(3).optional(),
+    stock_qty: z.number().min(0).max(1e9).optional(), lead_time_days: z.number().int().min(0).max(3650).optional(), restock_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    calc_rule: z.object({ consumption_per_m2: z.number().positive(), waste_pct: z.number().min(0).max(100).optional(), pack_size: z.number().positive().optional(), pack_label: z.string().max(30).optional(), note: z.string().max(500).optional() }).strict().optional(),
+  }).strict();
+  f.get(`${S}/products`, async (req) => { const p = paging(req); return listProducts(app.db, q(req).q, p.limit, p.offset); });
+  f.get(`${S}/products/:id`, async (req) => {
+    const id = uuid.safeParse((req.params as any).id); if (!id.success) throw new DomainError('validation_error', 'Neplatné id');
+    const r = await getProductAdmin(app.db, id.data); if (!r) throw new DomainError('not_found', 'Produkt neexistuje'); return r;
+  });
+  f.post(`${S}/products`, async (req) => { needAdmin(req); return saveProduct(app.db, app.core.audit, null, body(productBody, req), humanActor(me(req).user).id); });
+  f.patch(`${S}/products/:id`, async (req) => {
+    needAdmin(req);
+    const id = uuid.safeParse((req.params as any).id); if (!id.success) throw new DomainError('validation_error', 'Neplatné id');
+    return saveProduct(app.db, app.core.audit, id.data, body(productBody, req), humanActor(me(req).user).id);
+  });
   f.get(`${S}/import`, async (req) => { needAdmin(req); return { types: importHelp() }; });
   f.post(`${S}/import/:type`, { bodyLimit: 5 * 1024 * 1024 }, async (req) => {
     needAdmin(req);
