@@ -41,8 +41,16 @@ Hotové workflow k importu jsou v `n8n/` (follow-upy, GDPR retence, denní vyhle
 ## Vyhledávání zakázek
 1. Nastavte vyhledávač (`BRAVE_SEARCH_API_KEY` nebo `SEARXNG_URL`) a ceny modelu `LLM_PRICE_*`. 2. V `/ai-sales/policies` zadejte `scout.search_cost_usd_per_query` (cena dotazu u vašeho poskytovatele) a **stropy** `scout.monthly_budget_usd`, `scout.monthly_token_budget`, `scout.monthly_query_budget` (stropy upravujete kdykoli v administraci; běh se při dosažení kteréhokoli zastaví). 3. Vyzkoušejte ručně v `/ai-sales/opportunities` („Spustit vyhledávání teď“). 4. Až budete spokojeni, zapněte `scout.enabled` a naimportujte `n8n/scout-cron.json`. Dotazy, klíčová slova (`scout.facade_keywords`) a blokované domény se spravují v administraci. Nepřevedené nálezy se po `scout.retention_days` mažou.
 
+## Profil webu (cihlovestavby.cz → beleta.cz)
+Aktivní web určuje politika **`site.profile`** (administrace → Pravidla AI): `cihlovestavby` (výchozí; www.cihlovestavby.cz) nebo `beleta` (www.beleta.cz). Profil řídí značku a uvítání ve widgetu, kontext poradce (představuje se jako AI poradce daného webu) a **weby, které smějí vložit widget** (frame-ancestors). Přepnutí platí okamžitě bez restartu. Další web = nový záznam v `src/beleta/sites.ts`. `WIDGET_FRAME_ANCESTORS` v `.env` profil přepíše.
+
+**Vložení na web:** na stránky vložte jediný řádek `<script src="https://<adresa-aplikace>/widget-assets/embed.js" defer></script>` (adresa = `PUBLIC_ORIGIN`, doporučeno subdoména typu `ai.cihlovestavby.cz` s HTTPS) – vznikne plovoucí tlačítko „Online poradce“, které otevře `/widget` v rámečku. Alternativně přímý `<iframe src="…/widget">`.
+
+## Živá kontrola napojení
+`npm run check:live` ověří klíč LLM, vyhledávač a stažení stránky; `npm run check:live -- --scout` navíc provede zkušební běh vyhledávání zakázek (1 dotaz, max. 3 stránky) do dočasné databáze v paměti a vypíše nálezy a spotřebu tokenů.
+
 ## Embed widgetu
-`/widget` je výchozí `X-Frame-Options: DENY`. Pro vložení do webu nastavte `WIDGET_FRAME_ANCESTORS=https://www.beleta.cz` a vložte `<iframe src="https://ai.<doména>/widget" …>`; povolení platí jen pro `/widget`, administrace zůstává nevkládatelná.
+Vložení řeší profil webu (viz výše); povolení platí jen pro `/widget`, administrace zůstává vždy nevkládatelná (`X-Frame-Options: DENY`).
 
 ## Docker a CI
 `Dockerfile` (Node 22, data v `/data`, healthcheck `/healthz`): `docker build -t beleta-ai . && docker run -p 3000:3000 -v beleta-data:/data --env-file .env beleta-ai` (v produkci `NODE_ENV=production` vyžaduje `INTERNAL_TOKEN`, `PUBLIC_ORIGIN`, `ADMIN_*` při prvním startu). **Image nebyl sestaven** (v sandboxu neběží Docker daemon); ověřeno jen `npm ci --omit=dev` + `npm start` v produkčním režimu (`/healthz`, `/widget` OK). `.github/workflows/ci.yml`: typecheck, testy, `npm audit --audit-level=high` (běží až po pushi na GitHub).

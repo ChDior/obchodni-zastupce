@@ -8,6 +8,7 @@ import { humanActor, publicActor } from '../beleta/actors.js';
 import * as admin from '../beleta/admin.js';
 import { eraseCustomer, exportCustomer, runRetention } from '../beleta/gdpr.js';
 import { getProductAdmin, listProducts, saveProduct } from '../beleta/catalog-admin.js';
+import { SITES, siteById } from '../beleta/sites.js';
 import { deleteDocument, getDocument, listDocuments, saveDocument, setDocumentActive } from '../beleta/knowledge.js';
 import { scoutBudget } from '../beleta/scout.js';
 import { pdfToText } from '../beleta/pdf-text.js';
@@ -28,6 +29,7 @@ const ASSETS: Record<string, [string, string]> = {
   '/ai-sales-assets/admin.css': ['admin.css', 'text/css; charset=utf-8'],
   '/widget-assets/widget.js': ['widget.js', 'text/javascript; charset=utf-8'],
   '/widget-assets/widget.css': ['widget.css', 'text/css; charset=utf-8'],
+  '/widget-assets/embed.js': ['embed.js', 'text/javascript; charset=utf-8'],
 };
 const uuid = z.string().uuid();
 
@@ -57,12 +59,15 @@ export async function buildServer(app: Beleta, cfg: ServerConfig) {
 
   /* ---------- bezpečnostní hlavičky ---------- */
   f.addHook('onSend', async (req, reply) => {
-    const embeddable = !!cfg.widgetFrameAncestors?.length && req.url.split('?')[0] === '/widget';
+    // vložení widgetu: explicitní seznam (WIDGET_FRAME_ANCESTORS; [] = nikdo), jinak weby aktivního profilu
+    const ancestors = req.url.split('?')[0] === '/widget'
+      ? (cfg.widgetFrameAncestors ?? siteById(await app.core.policy.get('site.profile', 'cihlovestavby')).origins) : [];
+    const embeddable = ancestors.length > 0;
     reply.header('x-content-type-options', 'nosniff');
     if (!embeddable) reply.header('x-frame-options', 'DENY');
     reply.header('referrer-policy', 'no-referrer');
     reply.header('permissions-policy', 'camera=(), microphone=(), geolocation=()');
-    reply.header('content-security-policy', `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors ${embeddable ? cfg.widgetFrameAncestors!.join(' ') : "'none'"}; base-uri 'none'; form-action 'self'`);
+    reply.header('content-security-policy', `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors ${embeddable ? ancestors.join(' ') : "'none'"}; base-uri 'none'; form-action 'self'`);
     if (cfg.secureCookies) reply.header('strict-transport-security', 'max-age=31536000; includeSubDomains');
     if (reply.getHeader('cache-control') === undefined) reply.header('cache-control', 'no-store');
   });
@@ -84,6 +89,11 @@ export async function buildServer(app: Beleta, cfg: ServerConfig) {
     app.core.executor.execute(name, input, { db: app.db, actor, requestId, policy: app.core.policy, deps: app.core.deps, now: app.core.now });
 
   /* ---------- zdraví ---------- */
+  f.get('/api/public/site', async (req, reply) => {
+    const site = siteById(await app.core.policy.get('site.profile', 'cihlovestavby'));
+    reply.header('cache-control', 'public, max-age=60');
+    void req; return { id: site.id, brand: site.brand, greeting: site.greeting };
+  });
   f.get('/healthz', async () => { await app.db.query('select 1'); return { status: 'ok', ai: !!app.llm }; });
 
   /* ---------- statické stránky ---------- */
@@ -192,7 +202,7 @@ export async function buildServer(app: Beleta, cfg: ServerConfig) {
     }
   });
   f.post('/api/admin/logout', async (req, reply) => { await logout(app.db, me(req).token); reply.header('set-cookie', cookie('', 0)); return { ok: true }; });
-  f.get('/api/admin/me', async (req) => ({ user: { ...me(req).user, totp_enabled: await totpEnabledFor(app.db, me(req).user.id) } }));
+  f.get('/api/admin/me', async (req) => ({ user: { ...me(req).user, totp_enabled: await totpEnabledFor(app.db, me(req).user.id) }, site: siteById(await app.core.policy.get('site.profile', 'cihlovestavby')) }));
   const auditHuman = (req: FastifyRequest, action: string, entity_id?: string, output?: unknown) =>
     app.core.audit.record(app.db, { actor_type: 'human', actor_id: humanActor(me(req).user).id, action, status: 'success', entity_type: 'user', entity_id, output });
   const body = <T extends z.ZodTypeAny>(schema: T, req: FastifyRequest): z.infer<T> => {
@@ -408,6 +418,44 @@ export async function buildServer(app: Beleta, cfg: ServerConfig) {
     return importCsv(app.db, app.core.audit, type as ImportType, req.body, { dryRun: ['1', 'true'].includes(q(req).dry_run ?? ''), by: humanActor(me(req).user).id });
   });
   f.post(`${S}/demo/deactivate`, async (req) => { needAdmin(req); return { deactivated: await deactivateDemo(app.db, app.core.audit, humanActor(me(req).user).id) }; });
+  /* ---------- ruční zadávání (zákazník, poptávka, projekt, nabídka) – stejné nástroje jako AI, ale jako člověk ---------- */
+  const postal = z.string().regex(/^\d{3}\s?\d{2}$/, 'PSČ ve tvaru 123 45');
+  f.post(`${S}/customers`, async (req, reply) => {
+    needWrite(req);
+    const b = body(z.object({ type: z.enum(['person', 'company']).default('person'), name: z.string().min(2).max(120), company_name: z.string().max(160).optional(),
+      ico: z.string().regex(/^\d{8}$/, 'IČO má 8 číslic').optional(), email: z.string().email().max(160).optional(), phone: z.string().regex(/^\+?[\d\s-]{9,16}$/, 'Neplatný telefon').optional(),
+      street: z.string().max(160).optional(), city: z.string().max(100).optional(), postal_code: postal.optional(), consent_marketing: z.boolean().optional(), note: z.string().max(1000).optional() }).strict(), req);
+    return sendResult(reply, await runTool('create_customer', b, humanActor(me(req).user)));
+  });
+  f.post(`${S}/leads`, async (req, reply) => {
+    needWrite(req);
+    const b = body(z.object({ customer_id: uuid, summary: z.string().min(3).max(2000), source: z.enum(['email', 'phone', 'manual', 'outbound']).default('manual'),
+      qualification: z.object({ project_type: z.string().max(60).optional(), area_m2: z.number().positive().max(100000).optional(), timeline: z.enum(['asap', '1_month', '3_months', 'later', 'unknown']).optional(),
+        budget_net: z.number().positive().optional(), postal_code: postal.optional() }).strict().optional() }).strict(), req);
+    return sendResult(reply, await runTool('create_lead', b, humanActor(me(req).user)));
+  });
+  f.post(`${S}/projects`, async (req, reply) => {
+    needWrite(req);
+    const b = body(z.object({ customer_id: uuid, lead_id: uuid.optional(), name: z.string().min(3).max(160), project_type: z.string().min(2).max(60).optional(),
+      area_m2: z.number().positive().max(100000).optional(), postal_code: postal.optional(), notes: z.string().max(2000).optional() }).strict(), req);
+    return sendResult(reply, await runTool('create_project', b, humanActor(me(req).user)));
+  });
+  f.patch(`${S}/projects/:id`, async (req, reply) => {
+    needWrite(req);
+    const id = uuid.safeParse((req.params as any).id); if (!id.success) throw new DomainError('validation_error', 'Neplatné id');
+    const b = body(z.object({ name: z.string().min(3).max(160).optional(), status: z.enum(['draft', 'calculating', 'quoted', 'negotiation', 'won', 'lost', 'on_hold']).optional(),
+      area_m2: z.number().positive().max(100000).optional(), postal_code: postal.optional(), notes: z.string().max(2000).optional() }).strict(), req);
+    return sendResult(reply, await runTool('update_project', { project_id: id.data, ...b }, humanActor(me(req).user)));
+  });
+  f.post(`${S}/quotes`, async (req, reply) => {
+    needWrite(req);
+    const b = body(z.object({ customer_id: uuid, project_id: uuid.optional(),
+      items: z.array(z.object({ product: z.string().min(1).max(64), qty: z.number().positive().max(1_000_000) }).strict()).min(1).max(50),
+      shipping_postal_code: postal.optional(), discount_pct: z.number().min(0).max(100).optional(), requested_delivery_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      custom_terms: z.string().max(2000).optional(), notes: z.string().max(2000).optional() }).strict(), req);
+    return sendResult(reply, await runTool('create_quote', b, humanActor(me(req).user))); // ceny, sklad a doprava se doplní z databáze
+  });
+
   f.get(`${S}/followups`, async (req) => { const p = paging(req); return admin.listFollowups(app.db, q(req).status, p.limit, p.offset); });
   f.get(`${S}/emails`, async (req) => admin.listEmails(app.db, paging(req).limit));
   f.get(`${S}/approvals`, async (req) => app.core.approvals.list(app.db, q(req).status, paging(req).limit));
@@ -448,6 +496,7 @@ export async function buildServer(app: Beleta, cfg: ServerConfig) {
     if (!b.success) throw new DomainError('validation_error', 'Neplatná hodnota');
     const cur = (await app.core.policy.list() as any[]).find((p) => p.key === key);
     if (!cur) throw new DomainError('not_found', 'Neznámá politika');
+    if (key === 'site.profile' && !(String(b.data.value) in SITES)) throw new DomainError('validation_error', `Neznámý profil webu (${Object.keys(SITES).join(', ')})`);
     if (typeof cur.value !== typeof b.data.value) throw new DomainError('validation_error', `Očekáván typ ${typeof cur.value}`);
     await app.core.policy.set(key, b.data.value, humanActor(me(req).user).id);
     await app.core.audit.record(app.db, { actor_type: 'human', actor_id: humanActor(me(req).user).id, action: 'policy.update', status: 'success', entity_type: 'policy', entity_id: key, output: { from: cur.value, to: b.data.value } });

@@ -52,7 +52,7 @@ Hotovo navíc: SMTP transport, PDF nabídek, GDPR (export/výmaz/retence), 2FA +
 | 6 | ~~Nabídky~~ ✅ | hotovo: číslování po letech, PDF příloha, odeslání jedním krokem z administrace | R-07, R-08 |
 | 7 | E-mail | příjem a zpracování odpovědí zákazníků (inbound), šablony | R-08, R-09 |
 | 8 | Administrace | ✅ stránka zákazníků + GDPR tlačítka; editace katalogu, cen, skladu a kalkulačních pravidel v UI hotová (příslušenství a doprava jen přes import CSV); správa KB v UI hotová (.md, .txt, .pdf s textovou vrstvou; bez OCR) | R-11 |
-| 9 | Widget | ✅ vložení do webu (`WIDGET_FRAME_ANCESTORS`); chybí sběr kontaktu před předáním člověku | R-03 |
+| 9 | Widget | ✅ vložení do webu přes profil webu (cihlovestavby.cz / beleta.cz) a `embed.js`; chybí sběr kontaktu před předáním člověku | R-03 |
 | 10 | AI core | vytažení do samostatného balíčku pro CIHLICKY.CZ (zatím jen pravidlo bez importu domény) | R-15 |
 | 11 | Provoz | Dockerfile a CI přidány (neověřeno); chybí zálohy, monitoring, retence auditu, perzistentní rate limit | nefunkční |
 | 12 | **Aktivní vyhledávání zakázek** (fasáda z obkladových pásků / lícových cihel) | ✅ implementováno (v1, `docs/AI_OPPORTUNITY_SEARCH.md`); chybí živé ověření (vyhledávač, klíč, reálné weby), registry zakázek přes API, právní prověření oslovování | R-23 |

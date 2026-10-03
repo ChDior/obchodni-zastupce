@@ -161,17 +161,38 @@ describe('RateLimiter', () => {
 });
 void makeApp;
 
-describe('vložení widgetu', () => {
-  test('výchozí: nikdo nesmí vložit; s WIDGET_FRAME_ANCESTORS jen /widget a jen uvedené weby', async () => {
+describe('vložení widgetu a profil webu', () => {
+  test('výchozí = weby profilu cihlovestavby; přepnutí na beleta; [] = nikdo; override; administrace nikdy', async () => {
     const a = await makeApp();
-    const closed = await buildServer(a, { publicOrigin: ORIGIN, secureCookies: false, trustProxy: false });
-    const r0 = await closed.inject('/widget');
-    expect(r0.headers['x-frame-options']).toBe('DENY'); expect(String(r0.headers['content-security-policy'])).toContain("frame-ancestors 'none'");
-    const open = await buildServer(a, { publicOrigin: ORIGIN, secureCookies: false, trustProxy: false, widgetFrameAncestors: ['https://www.beleta.cz'] });
-    const r1 = await open.inject('/widget');
-    expect(r1.headers['x-frame-options']).toBeUndefined(); expect(String(r1.headers['content-security-policy'])).toContain('frame-ancestors https://www.beleta.cz;');
-    const adminPage = await open.inject('/ai-sales');
-    expect(adminPage.headers['x-frame-options']).toBe('DENY'); expect(String(adminPage.headers['content-security-policy'])).toContain("frame-ancestors 'none'");
-    await closed.close(); await open.close();
+    const csp = async (srv: any, url = '/widget') => String((await srv.inject(url)).headers['content-security-policy']);
+    const dflt = await buildServer(a, { publicOrigin: ORIGIN, secureCookies: false, trustProxy: false });
+    expect(await csp(dflt)).toContain('frame-ancestors https://www.cihlovestavby.cz https://cihlovestavby.cz;');
+    expect((await dflt.inject('/widget')).headers['x-frame-options']).toBeUndefined();
+    await a.core.policy.set('site.profile', 'beleta', 't');
+    expect(await csp(dflt)).toContain('frame-ancestors https://www.beleta.cz https://beleta.cz;');
+    expect((await dflt.inject('/api/public/site')).json()).toMatchObject({ id: 'beleta', brand: 'BELETA Plus' });
+    expect(await csp(dflt, '/ai-sales')).toContain("frame-ancestors 'none'");
+    expect((await dflt.inject('/ai-sales')).headers['x-frame-options']).toBe('DENY');
+    const none = await buildServer(a, { publicOrigin: ORIGIN, secureCookies: false, trustProxy: false, widgetFrameAncestors: [] });
+    expect(await csp(none)).toContain("frame-ancestors 'none'"); expect((await none.inject('/widget')).headers['x-frame-options']).toBe('DENY');
+    const over = await buildServer(a, { publicOrigin: ORIGIN, secureCookies: false, trustProxy: false, widgetFrameAncestors: ['https://jiny.example'] });
+    expect(await csp(over)).toContain('frame-ancestors https://jiny.example;');
+    const emb = await dflt.inject('/widget-assets/embed.js'); expect(emb.statusCode).toBe(200); expect(emb.headers['content-type']).toContain('javascript');
+    await dflt.close(); await none.close(); await over.close();
+  });
+  test('profil lze přepnout jen platnou hodnotou; poradce dostane kontext webu', async () => {
+    const llm = new ScriptedProvider([{ content: 'Dobrý den!', tool_calls: [] }]);
+    const app = await bootstrap({ llm, admin: { email: 'admin@test.cz', password: 'test-password-123' } });
+    const srv = await buildServer(app, { publicOrigin: ORIGIN, secureCookies: false, trustProxy: false });
+    const H = { 'x-requested-with': 'beleta-admin', 'content-type': 'application/json' };
+    const l = await srv.inject({ method: 'POST', url: '/api/admin/login', headers: H, payload: { email: 'admin@test.cz', password: 'test-password-123' } });
+    const cookie = String(l.headers['set-cookie']).split(';')[0];
+    const put = (v: string) => srv.inject({ method: 'PUT', url: '/api/admin/ai-sales/policies/site.profile', headers: { ...H, cookie }, payload: { value: v } });
+    expect((await put('neexistuje')).statusCode).toBe(400);
+    expect((await put('beleta')).statusCode).toBe(200);
+    await app.chat({ message: 'Ahoj' });
+    expect(llm.requests[0].system).toContain('BELETA Plus (www.beleta.cz)');
+    expect((await srv.inject({ url: '/api/admin/me', headers: { cookie } })).json().site.id).toBe('beleta');
+    await srv.close(); await app.close();
   });
 });

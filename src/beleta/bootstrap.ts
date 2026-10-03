@@ -11,6 +11,7 @@ import { LocalKnowledge, type KnowledgeProvider } from './knowledge.js';
 import { runScout } from './scout.js';
 import type { SearchProvider } from './search.js';
 import { seedDemo } from './seed.js';
+import { siteById, siteContext } from './sites.js';
 import { buildTools } from './tools.js';
 import { randomUUID } from 'node:crypto';
 
@@ -56,7 +57,9 @@ export async function bootstrap(opts: BootstrapOptions = {}) {
 
     let reply: string; let sources: Source[] = []; let approvalIds: string[] = [];
     try {
-      const res = await runAgent(agents.salesManager, history, { core, llm, base: baseFor(webAdvisorActor(), convId) });
+      const site = siteById(await core.policy.get('site.profile', 'cihlovestavby'));
+      const manager = { ...agents.salesManager, instructions: agents.salesManager.instructions + siteContext(site) };
+      const res = await runAgent(manager, history, { core, llm, base: baseFor(webAdvisorActor(), convId) });
       reply = res.reply || 'Omlouvám se, nedokázal jsem odpovědět. Zkuste to prosím jinak.';
       sources = res.sources; approvalIds = res.approvalIds;
     } catch (err) {

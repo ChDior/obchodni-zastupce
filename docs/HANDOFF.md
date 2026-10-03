@@ -15,10 +15,12 @@ BELETA AI SALES pro BELETA Plus s.r.o. – autonomní AI obchodní zástupce s l
 - Nabídky: číslování po letech, odeslání e-mailem s PDF přílohou (tool i tlačítko v administraci); stránka Zákazníci s GDPR tlačítky; vložení widgetu (`WIDGET_FRAME_ANCESTORS`); `Dockerfile`, CI (`.github/workflows`), n8n workflow v `n8n/` (Docker/CI/n8n neověřeno).
 - Znalostní báze v administraci (`/ai-sales/kb`): vytvoření, úprava, načtení z .md/.txt, deaktivace, smazání; PDF s textovou vrstvou (náhled textu ke kontrole před uložením; sken bez OCR nejde). Opraveno: prázdné tělo s `Content-Type: application/json` (POST/DELETE z UI bez těla) už nevrací 400.
 - Katalog v administraci (`/ai-sales/products`): úprava produktů, cen (s historií), skladu, parametrů a kalkulačního pravidla, jen admin, auditováno.
+- **Profil webu** (`site.profile`: cihlovestavby | beleta; přepnutí v administraci), `embed.js` pro vložení widgetu na web, `npm run check:live` (živá kontrola klíčů).
+- **Administrace česky** (Poptávky, Následné kontakty, české stavy) a **ruční zadávání** zákazníků, poptávek, projektů a nabídek.
 - **Aktivní vyhledávání zakázek** (OPPORTUNITY SCOUT; stránka Příležitosti): Brave/SearXNG, bezpečné stahování + robots.txt, citace i kontakty ověřuje server, návrh úvodního e-mailu k odeslání člověkem, měsíční stropy upravitelné v administraci, n8n cron `n8n/scout-cron.json`. Neověřeno živě (potřeba klíč vyhledávače a ANTHROPIC klíč).
 - Sdílený rate limiter v DB (aktivní při `DATABASE_URL`).
 - PostgreSQL server (`DATABASE_URL`, adaptér `openPg`): sada testů prošla na PG 16; při tom opraveno rozvětvení hash řetězu auditu při souběhu (advisory lock).
-- 171 testů (2 z nich jen s `TEST_DATABASE_URL`), typecheck čistý. Dokumentace v `docs/` (CURRENT_ARCHITECTURE, GAP_ANALYSIS, AI_*).
+- 174 testů (2 z nich jen s `TEST_DATABASE_URL`), typecheck čistý. Dokumentace v `docs/` (CURRENT_ARCHITECTURE, GAP_ANALYSIS, AI_*).
 - Windows: `start-windows.cmd` + `scripts/setup-windows.ps1` (instalace, `.env`, spuštění). Uživatel ho úspěšně spustil a je přihlášený do administrace.
 
 ## Rozhodnutí

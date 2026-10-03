@@ -41,6 +41,8 @@ Veřejné API **nemá žádný zápisový endpoint**; zápisy dělá jen AI pře
 | GET | `…/scout` – rozpočet (měsíční čerpání vs. stropy), dotazy, posledních 20 běhů | všechny |
 | POST | `…/scout/run` – ruční spuštění vyhledávání | admin |
 | POST/PATCH/DELETE | `…/scout/queries`, `…/scout/queries/:id` `{query}` / `{active}` | admin |
+| POST | `…/customers` · `…/leads` · `…/projects` · `…/quotes` (ruční zadání; stejné nástroje jako AI, ale jako člověk, tj. bez schvalovací brzdy; nabídka bere jen položky `{product, qty}` – ceny, sklad, DPH a dopravu doplní systém z DB) · PATCH `…/projects/:id` | admin, sales |
+| GET | `/api/public/site` – značka a uvítání aktivního profilu webu (pro widget) | veřejné |
 | GET/POST | `…/import` (popis sloupců) · `…/import/:type?dry_run=1` (`products|calc_rules|accessory_rules|shipping_zones|shipping_rates`, tělo `text/csv`, max 5 MB, vše-nebo-nic) · `…/demo/deactivate` | admin |
 | PUT | `…/policies/:key` `{value}` (typ musí odpovídat) | admin |
 

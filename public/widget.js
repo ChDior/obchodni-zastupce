@@ -16,7 +16,12 @@ function add(text, me, sources) {
   }
   log.append(d); log.scrollTop = log.scrollHeight;
 }
-add('Dobrý den, jsem AI poradce BELETA Plus. S čím vám mohu pomoci?', false);
+let greeted = false;
+const greet = (text) => { if (!greeted) { greeted = true; add(text, false); } };
+// značka a uvítání podle profilu webu (administrace → Pravidla AI → site.profile)
+fetch('/api/public/site').then((r) => r.json()).then((s) => {
+  document.getElementById('brand').textContent = s.brand + ' – online poradce'; document.title = s.brand + ' – online poradce'; greet(s.greeting);
+}).catch(() => greet('Dobrý den, jsem AI poradce. S čím vám mohu pomoci?'));
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();

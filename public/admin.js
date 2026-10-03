@@ -5,6 +5,7 @@ const BASE = '/ai-sales';
 const API = '/api/admin';
 let user = null;
 let pendingCount = 0;
+let site = null;
 
 const h = (tag, attrs, ...kids) => {
   const el = document.createElement(tag);
@@ -37,10 +38,19 @@ const fmt = {
 };
 const tone = (s) => ({ approved: 'ok', executed: 'ok', success: 'ok', sent: 'ok', won: 'ok', qualified: 'ok', done: 'ok', pending: 'warn', pending_approval: 'warn', draft: 'warn', new: 'warn',
   rejected: 'bad', failed: 'bad', error: 'bad', denied: 'bad', forbidden: 'bad', lost: 'bad', expired: 'bad', validation_error: 'bad' }[s] || '');
-const chip = (s) => h('span', { class: 'chip ' + tone(s) }, s);
+const CS = { new: 'nová', contacted: 'osloveno', qualified: 'kvalifikovaná', nurturing: 'rozvíjená', won: 'vyhráno', lost: 'ztraceno',
+  draft: 'návrh', calculating: 'kalkuluje se', quoted: 'nabídnuto', negotiation: 'jednání', on_hold: 'pozastaveno',
+  pending_approval: 'čeká na schválení', ready: 'připraveno', sent: 'odesláno', accepted: 'přijato', rejected: 'zamítnuto', expired: 'vypršelo',
+  pending: 'čeká', done: 'hotovo', cancelled: 'zrušeno', draft_created: 'koncept vytvořen', approved: 'schváleno', executed: 'provedeno', failed: 'selhalo',
+  success: 'úspěch', error: 'chyba', denied: 'zamítnuto systémem', forbidden: 'zakázáno', validation_error: 'neplatný vstup',
+  reviewed: 'prověřeno', promoted: 'převedeno na poptávku', dismissed: 'zamítnuto', running: 'běží', skipped: 'přeskočeno',
+  tender: 'výběrové řízení', planning: 'příprava', construction: 'realizace', completed: 'dokončeno', unknown: 'neznámá',
+  brick_slips: 'obkladové pásky', facing_brick: 'lícové cihly', other: 'jiné' };
+const cs = (s) => CS[s] || s;
+const chip = (s) => h('span', { class: 'chip ' + tone(s) }, cs(s));
 
 const PAGES = [
-  ['', 'Dashboard'], ['/opportunities', 'Příležitosti'], ['/leads', 'Leady'], ['/projects', 'Projekty'], ['/quotes', 'Nabídky'], ['/customers', 'Zákazníci'], ['/products', 'Katalog'], ['/kb', 'Znalostní báze'], ['/followups', 'Follow-up'],
+  ['', 'Dashboard'], ['/opportunities', 'Příležitosti'], ['/leads', 'Poptávky'], ['/projects', 'Projekty'], ['/quotes', 'Nabídky'], ['/customers', 'Zákazníci'], ['/products', 'Katalog'], ['/kb', 'Znalostní báze'], ['/followups', 'Následné kontakty'],
   ['/approvals', 'Ke schválení'], ['/activity', 'Aktivita AI'], ['/usage', 'Spotřeba AI'], ['/policies', 'Pravidla AI'], ['/security', 'Zabezpečení'],
 ];
 const path = () => location.pathname.replace(/\/+$/, '').slice(BASE.length);
@@ -55,7 +65,7 @@ function table(cols, rows, onRow) {
 }
 function filterBar(options, current, onChange) {
   const sel = h('select', { onchange: (e) => onChange(e.target.value) }, h('option', { value: '' }, 'Všechny stavy'),
-    options.map((o) => h('option', { value: o, selected: o === current }, o)));
+    options.map((o) => h('option', { value: o, selected: o === current }, cs(o))));
   return h('div', { class: 'toolbar' }, sel);
 }
 
@@ -64,9 +74,9 @@ const views = {
     const d = await api(S('/dashboard'));
     const card = (k, v, cls) => h('div', { class: 'card ' + (cls || '') }, h('div', { class: 'k' }, k), h('div', { class: 'v' }, v));
     return h('div', {}, h('h2', {}, 'Dashboard'), h('div', { class: 'grid' },
-      card('Nové leady', d.new_leads), card('Kvalifikované leady', d.qualified_leads), card('Rozpracované projekty', d.active_projects),
+      card('Nové poptávky', d.new_leads), card('Kvalifikované poptávky', d.qualified_leads), card('Rozpracované projekty', d.active_projects),
       card('Otevřené nabídky', d.open_quotes), card('Hodnota otevřených nabídek', fmt.money(d.open_quotes_value_net)),
-      card('Follow-up (splatné / čekající)', `${d.followups_due} / ${d.followups_pending}`, d.followups_due ? 'alert' : ''),
+      card('Následné kontakty (splatné / čekající)', `${d.followups_due} / ${d.followups_pending}`, d.followups_due ? 'alert' : ''),
       card('Čekající schválení', d.pending_approvals, d.pending_approvals ? 'alert' : ''),
       card('Potenciální obchodní hodnota', fmt.money(d.potential_value_net))));
   },
@@ -74,25 +84,25 @@ const views = {
     const st = new URLSearchParams(location.search).get('status') || '';
     const rows = await api(S('/leads' + (st ? '?status=' + encodeURIComponent(st) : '')));
     const bar = filterBar(['new', 'contacted', 'qualified', 'nurturing', 'won', 'lost'], st, (v) => { history.pushState({}, '', BASE + '/leads' + (v ? '?status=' + v : '')); render(); });
-    return h('div', {}, h('h2', {}, 'Leady'), bar, table([
+    return h('div', {}, h('h2', {}, 'Poptávky'), h('div', { class: 'toolbar' }, user.role !== 'viewer' ? h('button', { class: 'primary', onclick: () => newLead() }, 'Nová poptávka') : null), bar, table([
       { label: 'Zákazník', render: (r) => r.customer_name }, { label: 'Kontakt', render: (r) => [r.email, r.phone].filter(Boolean).join(' · ') },
       { label: 'Stav', render: (r) => chip(r.status) }, { label: 'Skóre', num: true, key: 'score' },
       { label: 'Shrnutí', render: (r) => r.summary }, { label: 'Vytvořeno', render: (r) => fmt.dt(r.created_at) },
       { label: '', render: (r) => user.role === 'viewer' ? '' : h('select', { onchange: async (e) => {
           try { const res = await api(S('/leads/' + r.id), { method: 'PATCH', body: { status: e.target.value } }); toast(res.pending_approval ? 'Změna čeká na schválení' : 'Uloženo'); } catch (er) { toast(er.message); }
-          render(); } }, ['', 'contacted', 'qualified', 'nurturing', 'won', 'lost'].map((o) => h('option', { value: o }, o || 'Změnit stav…'))) },
+          render(); } }, ['', 'contacted', 'qualified', 'nurturing', 'won', 'lost'].map((o) => h('option', { value: o }, o ? cs(o) : 'Změnit stav…'))) },
     ], rows));
   },
   async '/projects' () {
-    return h('div', {}, h('h2', {}, 'Projekty'), table([
+    return h('div', {}, h('h2', {}, 'Projekty'), h('div', { class: 'toolbar' }, user.role !== 'viewer' ? h('button', { class: 'primary', onclick: newProject }, 'Nový projekt') : null), table([
       { label: 'Projekt', key: 'name' }, { label: 'Zákazník', key: 'customer_name' }, { label: 'Stav', render: (r) => chip(r.status) },
       { label: 'Typ', key: 'project_type' }, { label: 'Plocha m²', num: true, render: (r) => r.area_m2 ?? '–' },
       { label: 'Hodnota bez DPH', num: true, render: (r) => fmt.money(r.estimated_value_net) }, { label: 'Vytvořeno', render: (r) => fmt.dt(r.created_at) },
-    ], await api(S('/projects'))));
+    ], await api(S('/projects')), openProject));
   },
   async '/quotes' () {
     const rows = await api(S('/quotes'));
-    return h('div', {}, h('h2', {}, 'Nabídky'), table([
+    return h('div', {}, h('h2', {}, 'Nabídky'), h('div', { class: 'toolbar' }, user.role !== 'viewer' ? h('button', { class: 'primary', onclick: newQuote }, 'Nová nabídka') : null), table([
       { label: 'Číslo', key: 'number' }, { label: 'Zákazník', key: 'customer_name' }, { label: 'Stav', render: (r) => chip(r.status) },
       { label: 'Celkem bez DPH', num: true, render: (r) => fmt.money(r.total_net) }, { label: 'Sleva %', num: true, key: 'discount_pct' },
       { label: 'Nejdříve dodání', render: (r) => fmt.d(r.earliest_delivery_date) }, { label: 'Platí do', render: (r) => fmt.d(r.valid_until) },
@@ -102,7 +112,7 @@ const views = {
   async '/followups' () {
     const rows = await api(S('/followups'));
     const act = (r, a, label) => h('button', { onclick: async () => { try { await api(S(`/followups/${r.id}/${a}`), { method: 'POST' }); toast('Uloženo'); } catch (e) { toast(e.message); } render(); } }, label);
-    return h('div', {}, h('h2', {}, 'Follow-up'), table([
+    return h('div', {}, h('h2', {}, 'Následné kontakty'), table([
       { label: 'Termín', render: (r) => fmt.dt(r.due_at) }, { label: 'Zákazník', key: 'customer_name' }, { label: 'Kanál', key: 'channel' },
       { label: 'Účel', key: 'purpose' }, { label: 'Stav', render: (r) => chip(r.status) },
       { label: '', render: (r) => (['pending', 'draft_created'].includes(r.status) && user.role !== 'viewer') ? h('span', {}, act(r, 'done', 'Hotovo'), ' ', act(r, 'cancel', 'Zrušit')) : '' },
@@ -147,9 +157,9 @@ const views = {
     const search = h('input', { placeholder: 'Jméno, e-mail, firma, IČO', value: p.get('q') || '' });
     const go2 = () => { history.pushState({}, '', BASE + '/customers' + (search.value ? '?q=' + encodeURIComponent(search.value) : '')); render(); };
     search.addEventListener('keydown', (e) => { if (e.key === 'Enter') go2(); });
-    return h('div', {}, h('h2', {}, 'Zákazníci'), h('div', { class: 'toolbar' }, search, h('button', { onclick: go2 }, 'Hledat')),
+    return h('div', {}, h('h2', {}, 'Zákazníci'), h('div', { class: 'toolbar' }, search, h('button', { onclick: go2 }, 'Hledat'), user.role !== 'viewer' ? h('button', { class: 'primary', onclick: newCustomer }, 'Nový zákazník') : null),
       table([{ label: 'Jméno', render: (r) => r.erased_at ? h('i', {}, 'anonymizován') : r.name }, { label: 'Firma', render: (r) => r.company_name || '' },
-        { label: 'Kontakt', render: (r) => [r.email, r.phone].filter(Boolean).join(' · ') }, { label: 'Leady', num: true, key: 'leads' }, { label: 'Nabídky', num: true, key: 'quotes' },
+        { label: 'Kontakt', render: (r) => [r.email, r.phone].filter(Boolean).join(' · ') }, { label: 'Poptávky', num: true, key: 'leads' }, { label: 'Nabídky', num: true, key: 'quotes' },
         { label: 'Souhlas', render: (r) => (r.consent_marketing ? 'ano' : 'ne') }, { label: 'Vytvořen', render: (r) => fmt.d(r.created_at) }], rows, openCustomer));
   },
   async '/products' () {
@@ -177,7 +187,7 @@ const views = {
     const p = new URLSearchParams(location.search); const status = p.get('status') || 'new';
     const [rows, ov] = await Promise.all([api(S('/opportunities?status=' + encodeURIComponent(status))), api(S('/scout'))]);
     const sel = h('select', { onchange: (e) => { history.pushState({}, '', BASE + '/opportunities?status=' + e.target.value); render(); } },
-      ['new', 'reviewed', 'promoted', 'dismissed'].map((o) => h('option', { value: o, selected: o === status }, o)));
+      ['new', 'reviewed', 'promoted', 'dismissed'].map((o) => h('option', { value: o, selected: o === status }, cs(o))));
     const num = (n) => new Intl.NumberFormat('cs-CZ').format(Math.round(n || 0));
     const b = ov.budget;
     const runNow = h('button', { class: 'primary', onclick: async (e) => {
@@ -204,7 +214,7 @@ const views = {
       h('div', { class: 'toolbar' }, user.role === 'admin' ? runNow : null, h('button', { onclick: queries }, 'Vyhledávací dotazy (' + ov.queries.filter((x) => x.active).length + ')'),
         h('a', { href: BASE + '/policies', onclick: (e) => { e.preventDefault(); go('/policies'); } }, 'Stropy a limity (Pravidla AI → scout.*)'), sel),
       table([{ label: 'Skóre', num: true, key: 'fit_score' }, { label: 'Název', key: 'title' }, { label: 'Organizace', render: (r) => r.organization || '–' }, { label: 'Kraj', render: (r) => r.region || '–' },
-        { label: 'Fáze', key: 'stage' }, { label: 'Materiál', key: 'facade_material' }, { label: 'Kontakt', render: (r) => [r.has_email && 'e-mail', r.has_phone && 'tel.'].filter(Boolean).join(', ') || '–' },
+        { label: 'Fáze', render: (r) => cs(r.stage) }, { label: 'Materiál', render: (r) => cs(r.facade_material) }, { label: 'Kontakt', render: (r) => [r.has_email && 'e-mail', r.has_phone && 'tel.'].filter(Boolean).join(', ') || '–' },
         { label: 'Návrh e-mailu', render: (r) => (r.has_draft ? 'ano' : '–') }, { label: 'Nalezeno', render: (r) => fmt.dt(r.found_at) }], rows, (r) => openOpportunity(r.id)),
       h('h3', {}, 'Poslední běhy'),
       table([{ label: 'Start', render: (r) => fmt.dt(r.started_at) }, { label: 'Spuštění', key: 'trigger' }, { label: 'Stav', render: (r) => chip(r.status) }, { label: 'Dotazů', num: true, key: 'queries' },
@@ -283,6 +293,108 @@ function showJson(title, obj) {
   const dlg = h('dialog', {}, h('h3', {}, title), h('pre', {}, JSON.stringify(obj, null, 2)), h('div', { class: 'toolbar' }, h('button', { onclick: () => { dlg.close(); dlg.remove(); } }, 'Zavřít')));
   document.body.append(dlg); dlg.showModal();
 }
+/* ---------- ruční zadávání ---------- */
+function customerPicker(preset) {
+  const q = h('input', { placeholder: 'Hledat zákazníka (jméno, e-mail, firma, IČO) a Enter' });
+  const sel = h('select', { size: '4' });
+  const load = async () => {
+    try { const rows = await api(S('/customers?limit=30&q=' + encodeURIComponent(q.value))); sel.replaceChildren(...rows.filter((r) => !r.erased_at).map((r) => h('option', { value: r.id }, [r.name, r.company_name, r.email].filter(Boolean).join(' · ')))); if (sel.options.length === 1) sel.selectedIndex = 0; } catch (e) { toast(e.message); }
+  };
+  q.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); load(); } });
+  load();
+  const el = h('div', {}, q, sel);
+  return { el, value: () => sel.value, onChange: (fn) => sel.addEventListener('change', fn) };
+}
+function field(label, input) { return [h('label', {}, label), input]; }
+/** Obecný formulář v dialogu. fields: [{key,label,type,options,placeholder}] ; submit(values) vrací Promise. */
+function openForm(title, fields, submit, label = 'Uložit') {
+  const inputs = {};
+  const rows = fields.map((f) => {
+    let el;
+    if (f.type === 'textarea') el = h('textarea', { rows: '3', placeholder: f.placeholder || '' });
+    else if (f.type === 'select') el = h('select', {}, f.options.map(([v, t]) => h('option', { value: v }, t)));
+    else if (f.type === 'customer') { const cp = customerPicker(); inputs[f.key] = { get: cp.value }; return field(f.label, cp.el); }
+    else el = h('input', { type: f.type || 'text', step: f.type === 'number' ? 'any' : null, placeholder: f.placeholder || '' });
+    inputs[f.key] = { get: () => el.value, type: f.type };
+    return field(f.label, el);
+  });
+  const dlg = h('dialog', {}, h('h3', {}, title), h('div', { class: 'form' }, rows),
+    h('div', { class: 'toolbar' }, h('button', { class: 'primary', onclick: async () => {
+      const v = {};
+      for (const f of fields) { const raw = inputs[f.key].get(); if (raw === '' || raw == null) continue; v[f.key] = f.type === 'number' ? Number(String(raw).replace(',', '.')) : raw; }
+      try { await submit(v); dlg.close(); dlg.remove(); render(); } catch (e) { toast(e.message); }
+    } }, label), h('button', { onclick: () => { dlg.close(); dlg.remove(); } }, 'Zrušit')));
+  document.body.append(dlg); dlg.showModal();
+}
+const needCustomer = (v) => { if (!v.customer_id) throw new Error('Vyberte zákazníka'); };
+function newCustomer() {
+  openForm('Nový zákazník', [
+    { key: 'type', label: 'Typ', type: 'select', options: [['person', 'Fyzická osoba'], ['company', 'Firma']] }, { key: 'name', label: 'Jméno / kontaktní osoba' },
+    { key: 'company_name', label: 'Firma' }, { key: 'ico', label: 'IČO (8 číslic)' }, { key: 'email', label: 'E-mail', type: 'email' }, { key: 'phone', label: 'Telefon (+420 …)' },
+    { key: 'street', label: 'Ulice' }, { key: 'city', label: 'Město' }, { key: 'postal_code', label: 'PSČ' }, { key: 'note', label: 'Poznámka', type: 'textarea' },
+  ], async (v) => { await api(S('/customers'), { method: 'POST', body: v }); toast('Zákazník uložen'); });
+}
+function newLead() {
+  openForm('Nová poptávka', [
+    { key: 'customer_id', label: 'Zákazník', type: 'customer' }, { key: 'summary', label: 'Shrnutí poptávky', type: 'textarea' },
+    { key: 'source', label: 'Zdroj', type: 'select', options: [['phone', 'Telefon'], ['email', 'E-mail'], ['manual', 'Jiné / osobně']] },
+    { key: 'project_type', label: 'Typ stavby' }, { key: 'area_m2', label: 'Plocha (m²)', type: 'number' }, { key: 'postal_code', label: 'PSČ stavby' },
+  ], async (v) => {
+    needCustomer(v); const { project_type, area_m2, postal_code, ...rest } = v; const qualification = {};
+    if (project_type) qualification.project_type = project_type; if (area_m2) qualification.area_m2 = area_m2; if (postal_code) qualification.postal_code = postal_code;
+    await api(S('/leads'), { method: 'POST', body: { ...rest, qualification } }); toast('Poptávka uložena');
+  });
+}
+function newProject() {
+  openForm('Nový projekt', [
+    { key: 'customer_id', label: 'Zákazník', type: 'customer' }, { key: 'name', label: 'Název projektu' }, { key: 'project_type', label: 'Typ stavby' },
+    { key: 'area_m2', label: 'Plocha (m²)', type: 'number' }, { key: 'postal_code', label: 'PSČ stavby' }, { key: 'notes', label: 'Poznámky', type: 'textarea' },
+  ], async (v) => { needCustomer(v); await api(S('/projects'), { method: 'POST', body: v }); toast('Projekt uložen'); });
+}
+function openProject(r) {
+  const status = h('select', { disabled: user.role === 'viewer' }, ['draft', 'calculating', 'quoted', 'negotiation', 'won', 'lost', 'on_hold'].map((o) => h('option', { value: o, selected: o === r.status }, cs(o))));
+  const notes = h('textarea', { rows: '4', disabled: user.role === 'viewer' }, r.notes || '');
+  const dlg = h('dialog', {}, h('h3', {}, r.name), h('p', { class: 'muted' }, `${r.customer_name} · ${r.project_type}${r.area_m2 ? ' · ' + r.area_m2 + ' m²' : ''} · hodnota ${fmt.money(r.estimated_value_net)}`),
+    h('div', { class: 'form' }, field('Stav', status), field('Poznámky', notes)),
+    h('div', { class: 'toolbar' }, user.role !== 'viewer' ? h('button', { class: 'primary', onclick: async () => {
+      try { const res = await api(S('/projects/' + r.id), { method: 'PATCH', body: { status: status.value, notes: notes.value } }); toast(res.pending_approval ? 'Čeká na schválení' : 'Uloženo'); dlg.close(); dlg.remove(); render(); } catch (e) { toast(e.message); } } }, 'Uložit') : null,
+      h('button', { onclick: () => { dlg.close(); dlg.remove(); } }, 'Zavřít')));
+  document.body.append(dlg); dlg.showModal();
+}
+async function newQuote() {
+  const products = await api(S('/products?limit=500'));
+  const cp = customerPicker();
+  const project = h('select', {}, h('option', { value: '' }, '(bez projektu)'));
+  cp.onChange(async () => { try { const d = await api(S('/customers/' + cp.value())); project.replaceChildren(h('option', { value: '' }, '(bez projektu)'), ...d.projects.map((p) => h('option', { value: p.id }, p.name))); } catch { /* ignore */ } });
+  const list = h('datalist', { id: 'dl-products' }, products.map((p) => h('option', { value: p.sku }, p.name)));
+  const items = h('div', {});
+  const addRow = () => {
+    const sku = h('input', { list: 'dl-products', placeholder: 'SKU produktu' }), qty = h('input', { type: 'number', step: 'any', min: '0', placeholder: 'Množství', style: 'width:110px' });
+    const row = h('div', { class: 'row' }, sku, qty, h('button', { type: 'button', onclick: () => row.remove() }, '✕')); row._get = () => ({ product: sku.value.trim(), qty: Number(String(qty.value).replace(',', '.')) });
+    items.append(row);
+  };
+  addRow();
+  const ship = h('input', { placeholder: 'PSČ dodání (pro výpočet dopravy)' }), disc = h('input', { type: 'number', step: 'any', min: '0', max: '100', placeholder: '0' });
+  const date = h('input', { type: 'date' }), terms = h('textarea', { rows: '2' }), notes = h('textarea', { rows: '2' });
+  const dlg = h('dialog', {}, h('h3', {}, 'Nová nabídka'), list,
+    h('p', { class: 'muted' }, 'Ceny, sklad, DPH a dopravu doplní systém z databáze – zadáváte jen položky a množství.'),
+    h('div', { class: 'form' }, field('Zákazník', cp.el), field('Projekt', project), h('label', {}, 'Položky'), h('div', {}, items, h('button', { type: 'button', onclick: addRow }, '+ Přidat položku')),
+      field('PSČ dodání', ship), field('Sleva (%)', disc), field('Požadované dodání', date), field('Zvláštní podmínky', terms), field('Poznámka', notes)),
+    h('div', { class: 'toolbar' }, h('button', { class: 'primary', onclick: async () => {
+      try {
+        if (!cp.value()) throw new Error('Vyberte zákazníka');
+        const its = [...items.children].map((r) => r._get()).filter((i) => i.product || i.qty);
+        if (!its.length || its.some((i) => !i.product || !(i.qty > 0))) throw new Error('Vyplňte u každé položky SKU a množství větší než 0');
+        const body = { customer_id: cp.value(), items: its };
+        if (project.value) body.project_id = project.value; if (ship.value) body.shipping_postal_code = ship.value;
+        if (disc.value) body.discount_pct = Number(disc.value.replace(',', '.')); if (date.value) body.requested_delivery_date = date.value;
+        if (terms.value) body.custom_terms = terms.value; if (notes.value) body.notes = notes.value;
+        const r = await api(S('/quotes'), { method: 'POST', body }); toast('Nabídka ' + r.data.number + ' vytvořena'); dlg.close(); dlg.remove(); render();
+      } catch (e) { toast(e.message); }
+    } }, 'Vytvořit nabídku'), h('button', { onclick: () => { dlg.close(); dlg.remove(); } }, 'Zrušit')));
+  document.body.append(dlg); dlg.showModal();
+}
+
 async function openQuote(r) {
   const r0 = r;
   const q = await api(S('/quotes/' + r.id));
@@ -305,10 +417,10 @@ async function openCustomer(r) {
   const dlg = h('dialog', {}, h('h3', {}, c.erased_at ? 'Anonymizovaný zákazník' : c.name),
     h('p', { class: 'muted' }, [c.company_name, c.ico && 'IČO ' + c.ico, c.email, c.phone, [c.street, c.postal_code, c.city].filter(Boolean).join(' ')].filter(Boolean).join(' · ') || '–'),
     c.note ? h('p', {}, c.note) : null,
-    sec('Leady', [{ label: 'Stav', render: (x) => chip(x.status) }, { label: 'Skóre', num: true, key: 'score' }, { label: 'Shrnutí', key: 'summary' }], d.leads),
+    sec('Poptávky', [{ label: 'Stav', render: (x) => chip(x.status) }, { label: 'Skóre', num: true, key: 'score' }, { label: 'Shrnutí', key: 'summary' }], d.leads),
     sec('Projekty', [{ label: 'Projekt', key: 'name' }, { label: 'Stav', render: (x) => chip(x.status) }, { label: 'Hodnota', num: true, render: (x) => fmt.money(x.estimated_value_net) }], d.projects),
     sec('Nabídky', [{ label: 'Číslo', key: 'number' }, { label: 'Stav', render: (x) => chip(x.status) }, { label: 'Bez DPH', num: true, render: (x) => fmt.money(x.total_net) }], d.quotes),
-    sec('Follow-upy', [{ label: 'Termín', render: (x) => fmt.dt(x.due_at) }, { label: 'Účel', key: 'purpose' }, { label: 'Stav', render: (x) => chip(x.status) }], d.followups),
+    sec('Následné kontakty', [{ label: 'Termín', render: (x) => fmt.dt(x.due_at) }, { label: 'Účel', key: 'purpose' }, { label: 'Stav', render: (x) => chip(x.status) }], d.followups),
     sec('E-maily', [{ label: 'Datum', render: (x) => fmt.dt(x.created_at) }, { label: 'Předmět', key: 'subject' }, { label: 'Stav', render: (x) => chip(x.status) }], d.emails),
     h('div', { class: 'toolbar' },
       isAdmin && !c.erased_at ? h('button', { onclick: () => window.open('/api/admin' + S('/customers/' + c.id + '/export'), '_blank', 'noopener') }, 'Export dat (GDPR)') : null,
@@ -390,22 +502,22 @@ async function openOpportunity(id) {
   const safeUrl = /^https?:\/\//i.test(o.url) ? o.url : null;
   const setStatus = (status) => async () => { try { await api(S('/opportunities/' + id), { method: 'PATCH', body: { status } }); toast('Uloženo'); dlg.close(); dlg.remove(); render(); } catch (e) { toast(e.message); } };
   const promote = (send) => async () => {
-    if (send && !confirm('Vytvořit zákazníka a lead a ODESLAT e-mail na ' + o.contact_email + '?\nOdesíláte jako člověk – ověřte text a oprávněnost oslovení.')) return;
+    if (send && !confirm('Vytvořit zákazníka a poptávku a ODESLAT e-mail na ' + o.contact_email + '?\nOdesíláte jako člověk – ověřte text a oprávněnost oslovení.')) return;
     try {
       const r = await api(S('/opportunities/' + id + '/promote'), { method: 'POST', body: send ? { send_email: true, subject: subject.value, body: text.value } : {} });
-      toast(send ? (r.email?.status === 'sent' ? 'Lead vytvořen, e-mail odeslán' : 'Lead vytvořen, e-mail se nepodařilo odeslat') : 'Lead vytvořen'); dlg.close(); dlg.remove(); render();
+      toast(send ? (r.email?.status === 'sent' ? 'Poptávka vytvořena, e-mail odeslán' : 'Poptávka vytvořena, e-mail se nepodařilo odeslat') : 'Poptávka vytvořena'); dlg.close(); dlg.remove(); render();
     } catch (e) { toast(e.message); }
   };
   const dlg = h('dialog', {}, h('h3', {}, o.title), h('p', { class: 'muted' }, [o.organization, o.location, o.region].filter(Boolean).join(' · ') || '–'),
     h('p', {}, 'Zdroj: ', safeUrl ? h('a', { href: safeUrl, target: '_blank', rel: 'noopener noreferrer' }, o.url) : o.url),
-    h('p', {}, `Skóre ${o.fit_score} · fáze ${o.stage} · materiál ${o.facade_material}` + (o.scale_note ? ' · rozsah: ' + o.scale_note : '') + ' · stav: ', chip(o.status)),
+    h('p', {}, `Skóre ${o.fit_score} · fáze: ${cs(o.stage)} · materiál: ${cs(o.facade_material)}` + (o.scale_note ? ' · rozsah: ' + o.scale_note : '') + ' · stav: ', chip(o.status)),
     h('h4', {}, 'Doslovná citace ze zdroje'), h('blockquote', {}, o.evidence),
     h('h4', {}, 'Kontakt ze zdroje'), h('p', {}, [o.contact_email, o.contact_phone, o.contact_name].filter(Boolean).join(' · ') || 'žádný nalezen'),
     o.draft_body ? [h('h4', {}, 'Návrh úvodního e-mailu (AI – zkontrolujte a upravte)'), subject, text, h('p', { class: 'muted' }, 'Při odeslání se připojí patička: ' + o.email_footer)] : null,
     h('div', { class: 'toolbar' }, canWrite && open ? [
       h('button', { onclick: setStatus('reviewed') }, 'Prověřeno'), h('button', { class: 'danger', onclick: setStatus('dismissed') }, 'Zamítnout'),
-      (o.contact_email || o.contact_phone) ? h('button', { onclick: promote(false) }, 'Převést na lead') : null,
-      o.contact_email && o.draft_body ? h('button', { class: 'primary', onclick: promote(true) }, 'Převést na lead a odeslat e-mail') : null] : null,
+      (o.contact_email || o.contact_phone) ? h('button', { onclick: promote(false) }, 'Převést na poptávku') : null,
+      o.contact_email && o.draft_body ? h('button', { class: 'primary', onclick: promote(true) }, 'Převést na poptávku a odeslat e-mail') : null] : null,
       h('button', { onclick: () => { dlg.close(); dlg.remove(); } }, 'Zavřít')));
   document.body.append(dlg); dlg.showModal();
 }
@@ -429,7 +541,7 @@ function loginView() {
 
 async function render() {
   if (!user) {
-    try { user = (await api('/me')).user; } catch { /* nepřihlášen */ }
+    try { const me0 = await api('/me'); user = me0.user; site = me0.site; } catch { /* nepřihlášen */ }
     if (!user) { $app.replaceChildren(loginView()); return; }
   }
   const p = path();
@@ -440,7 +552,7 @@ async function render() {
   const nav = h('nav', { class: 'side' }, h('h1', {}, 'BELETA · AI SALES'),
     PAGES.map(([href, label]) => h('a', { href: BASE + href, class: (views[p] ? p : '') === href ? 'active' : '', onclick: (e) => { e.preventDefault(); go(href); } },
       label, href === '/approvals' && pendingCount ? h('span', { class: 'badge' }, pendingCount) : null)),
-    h('div', { class: 'who' }, user.email, h('br'), user.role, ' · ', h('a', { href: '#', onclick: async (e) => { e.preventDefault(); try { await api('/logout', { method: 'POST' }); } catch { /* ignore */ } user = null; render(); } }, 'Odhlásit')));
+    h('div', { class: 'who' }, site ? h('div', { class: 'muted' }, 'Web: ' + site.brand) : null, user.email, h('br'), user.role, ' · ', h('a', { href: '#', onclick: async (e) => { e.preventDefault(); try { await api('/logout', { method: 'POST' }); } catch { /* ignore */ } user = null; render(); } }, 'Odhlásit')));
   $app.replaceChildren(h('div', { class: 'layout' }, nav, h('main', {}, content)));
 }
 render();

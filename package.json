@@ -13,6 +13,7 @@
     "seed": "node --env-file-if-exists=.env --import tsx src/beleta/seed-cli.ts",
     "reset-password": "node --env-file-if-exists=.env --import tsx src/beleta/reset-password-cli.ts",
     "import": "node --env-file-if-exists=.env --import tsx src/beleta/import-cli.ts",
+    "check:live": "node --env-file-if-exists=.env --import tsx scripts/live-check.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
