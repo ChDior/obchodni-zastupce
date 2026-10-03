@@ -9,6 +9,7 @@ import * as admin from '../beleta/admin.js';
 import { eraseCustomer, exportCustomer, runRetention } from '../beleta/gdpr.js';
 import { getProductAdmin, listProducts, saveProduct } from '../beleta/catalog-admin.js';
 import { deleteDocument, getDocument, listDocuments, saveDocument, setDocumentActive } from '../beleta/knowledge.js';
+import { scoutBudget } from '../beleta/scout.js';
 import { pdfToText } from '../beleta/pdf-text.js';
 import { IMPORT_TYPES, deactivateDemo, importCsv, importHelp, type ImportType } from '../beleta/import-csv.js';
 import { renderQuotePdf } from '../beleta/quote-pdf.js';
@@ -33,7 +34,7 @@ const uuid = z.string().uuid();
 const STATUS_BY_CODE: Record<string, number> = {
   validation_error: 400, bad_message: 400, forbidden: 403, invalid_credentials: 401, unknown_tool: 404, not_found: 404,
   product_not_found: 404, price_not_found: 404, stock_unknown: 404, customer_not_found: 404, lead_not_found: 404, project_not_found: 404, quote_not_found: 404,
-  not_pending: 409, already_erased: 409, user_exists: 409, no_text: 422, title_exists: 409, sku_exists: 409, quote_not_ready: 409, totp_required: 401, invalid_code: 400, totp_already_enabled: 409, totp_not_enabled: 409, ai_unavailable: 503, denied: 403,
+  not_pending: 409, already_erased: 409, user_exists: 409, no_contact: 422, scout_running: 409, no_text: 422, title_exists: 409, sku_exists: 409, quote_not_ready: 409, totp_required: 401, invalid_code: 400, totp_already_enabled: 409, totp_not_enabled: 409, ai_unavailable: 503, denied: 403,
 };
 
 export async function buildServer(app: Beleta, cfg: ServerConfig) {
@@ -140,6 +141,10 @@ export async function buildServer(app: Beleta, cfg: ServerConfig) {
   f.post('/api/internal/followups/run-due', async (req, reply) => {
     if (!internalAuth(req)) return unauthorized(reply);
     return app.runDueFollowups();
+  });
+  f.post('/api/internal/scout/run', async (req, reply) => {
+    if (!internalAuth(req)) return unauthorized(reply);
+    return app.scout({ trigger: 'cron' });
   });
   f.post('/api/internal/gdpr/retention', async (req, reply) => {
     if (!internalAuth(req)) return unauthorized(reply);
@@ -319,6 +324,81 @@ export async function buildServer(app: Beleta, cfg: ServerConfig) {
     await setDocumentActive(app.db, id, b.active); await kbAudit(req, 'kb.active', id, { active: b.active }); return { ok: true };
   });
   f.delete(`${S}/kb/:id`, async (req) => { needAdmin(req); const id = kbId(req); await deleteDocument(app.db, id); await kbAudit(req, 'kb.delete', id); return { ok: true }; });
+  /* ---------- aktivní vyhledávání zakázek ---------- */
+  f.get(`${S}/opportunities`, async (req) => {
+    const p = paging(req); const st = q(req).status; const min = Number(q(req).min_score) || 0;
+    return app.db.query(
+      `select o.id, o.title, o.organization, o.location, o.region, o.stage, o.facade_material, o.scale_note, o.fit_score, o.status, o.url, o.contact_email is not null as has_email,
+              o.contact_phone is not null as has_phone, o.draft_subject is not null as has_draft, o.found_at, o.lead_id
+       from opportunities o where ($3::text is null or o.status=$3) and o.fit_score >= $4 order by o.fit_score desc, o.found_at desc limit $1 offset $2`,
+      [p.limit, p.offset, st ?? null, min]);
+  });
+  f.get(`${S}/opportunities/:id`, async (req) => {
+    const id = uuid.safeParse((req.params as any).id); if (!id.success) throw new DomainError('validation_error', 'Neplatné id');
+    const r = (await app.db.query<any>('select * from opportunities where id=$1', [id.data]))[0]; if (!r) throw new DomainError('not_found', 'Příležitost neexistuje');
+    r.email_footer = String(await app.core.policy.get('scout.email_footer', ''));
+    return r;
+  });
+  f.patch(`${S}/opportunities/:id`, async (req) => {
+    needWrite(req);
+    const id = uuid.safeParse((req.params as any).id); if (!id.success) throw new DomainError('validation_error', 'Neplatné id');
+    const b = body(z.object({ status: z.enum(['new', 'reviewed', 'dismissed']) }).strict(), req);
+    const r = await app.db.query(`update opportunities set status=$2, decided_by=$3, decided_at=now() where id=$1 and status <> 'promoted' returning id`, [id.data, b.status, humanActor(me(req).user).id]);
+    if (!r.length) throw new DomainError('not_found', 'Příležitost nelze změnit');
+    await app.core.audit.record(app.db, { actor_type: 'human', actor_id: humanActor(me(req).user).id, action: 'opportunity.status', status: 'success', entity_type: 'opportunity', entity_id: id.data, output: { status: b.status } });
+    return { ok: true };
+  });
+  f.post(`${S}/opportunities/:id/promote`, async (req, reply) => {
+    needWrite(req);
+    const id = uuid.safeParse((req.params as any).id); if (!id.success) throw new DomainError('validation_error', 'Neplatné id');
+    const b = body(z.object({ send_email: z.boolean().optional(), subject: z.string().min(3).max(200).optional(), body: z.string().min(10).max(4000).optional() }).strict(), req);
+    const o = (await app.db.query<any>('select * from opportunities where id=$1', [id.data]))[0]; if (!o) throw new DomainError('not_found', 'Příležitost neexistuje');
+    if (o.status === 'promoted') throw new DomainError('not_pending', 'Příležitost už byla převedena');
+    const phone = o.contact_phone && /^\+?[\d\s-]{9,16}$/.test(o.contact_phone) ? o.contact_phone : undefined;
+    if (!o.contact_email && !phone) throw new DomainError('no_contact', 'Příležitost nemá použitelný kontakt – doplňte ho ručně v CRM');
+    const actor = humanActor(me(req).user);
+    const org = o.organization ?? o.title.slice(0, 120);
+    const cust = await runTool('create_customer', { type: 'company', name: org.length >= 2 ? org : o.title.slice(0, 120), company_name: o.organization ?? undefined, email: o.contact_email ?? undefined, phone,
+      note: `Příležitost z webu: ${o.url}`.slice(0, 1000), consent_marketing: false }, actor);
+    if (cust.status !== 'ok') return sendResult(reply, cust);
+    const customerId = (cust.data as any).customer_id as string;
+    const lead = await runTool('create_lead', { customer_id: customerId, source: 'outbound', summary: `Příležitost: ${o.title} (${o.url})`.slice(0, 2000), qualification: { project_type: 'fasada_pasky_nebo_licove_cihly' } }, actor);
+    if (lead.status !== 'ok') return sendResult(reply, lead);
+    let email: { email_id: string; status: string } | null = null;
+    if (b.send_email) {
+      const subject = b.subject ?? o.draft_subject; let text = b.body ?? o.draft_body;
+      if (!o.contact_email || !subject || !text) throw new DomainError('validation_error', 'Pro odeslání je nutný kontaktní e-mail, předmět a text');
+      const footer = String(await app.core.policy.get('scout.email_footer', '')); if (footer && !text.includes(footer)) text += `\n\n${footer}`;
+      const sent = await runTool('send_email', { customer_id: customerId, subject, body: text, purpose: 'other' }, actor);
+      if (sent.status !== 'ok') return sendResult(reply, sent);
+      email = { email_id: (sent.data as any).email_id, status: (sent.data as any).status };
+    }
+    await app.db.query(`update opportunities set status='promoted', lead_id=$2, decided_by=$3, decided_at=now() where id=$1`, [id.data, (lead.data as any).lead_id, actor.id]);
+    await app.core.audit.record(app.db, { actor_type: 'human', actor_id: actor.id, action: 'opportunity.promote', status: 'success', entity_type: 'opportunity', entity_id: id.data, output: { lead_id: (lead.data as any).lead_id, email: email?.status ?? null } });
+    return { customer_id: customerId, lead_id: (lead.data as any).lead_id, email };
+  });
+  f.get(`${S}/scout`, async () => ({
+    budget: await scoutBudget(app.db, app.core.policy, app.pricing),
+    search_configured: !!app.search, search_provider: app.search?.name ?? null, enabled: (await app.core.policy.get('scout.enabled', false)) === true,
+    queries: await app.db.query('select id, query, active, last_run_at from scout_queries order by created_at'),
+    runs: await app.db.query('select id, started_at, finished_at, status, trigger, queries, pages, analysed, found, input_tokens, output_tokens, note from scout_runs order by started_at desc limit 20'),
+  }));
+  f.post(`${S}/scout/run`, async (req) => { needAdmin(req); return app.scout({ trigger: 'manual', by: humanActor(me(req).user).id }); });
+  f.post(`${S}/scout/queries`, async (req) => {
+    needAdmin(req); const b = body(z.object({ query: z.string().min(5).max(200) }).strict(), req);
+    try { await app.db.query('insert into scout_queries (query) values ($1)', [b.query.trim()]); } catch { throw new DomainError('user_exists', 'Takový dotaz už existuje'); }
+    return { ok: true };
+  });
+  f.patch(`${S}/scout/queries/:id`, async (req) => {
+    needAdmin(req); const id = uuid.safeParse((req.params as any).id); if (!id.success) throw new DomainError('validation_error', 'Neplatné id');
+    const b = body(z.object({ active: z.boolean() }).strict(), req);
+    if (!(await app.db.query('update scout_queries set active=$2 where id=$1 returning id', [id.data, b.active])).length) throw new DomainError('not_found', 'Dotaz neexistuje');
+    return { ok: true };
+  });
+  f.delete(`${S}/scout/queries/:id`, async (req) => {
+    needAdmin(req); const id = uuid.safeParse((req.params as any).id); if (!id.success) throw new DomainError('validation_error', 'Neplatné id');
+    await app.db.query('delete from scout_queries where id=$1', [id.data]); return { ok: true };
+  });
   f.get(`${S}/import`, async (req) => { needAdmin(req); return { types: importHelp() }; });
   f.post(`${S}/import/:type`, { bodyLimit: 5 * 1024 * 1024 }, async (req) => {
     needAdmin(req);

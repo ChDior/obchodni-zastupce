@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AgentDef } from '../ai-core/index.js';
 
-export function loadAgents(dir: string): { salesManager: AgentDef; communication: AgentDef } {
+export function loadAgents(dir: string): { salesManager: AgentDef; communication: AgentDef; scout: AgentDef } {
   const common = readFileSync(join(dir, '_common.md'), 'utf8');
   const prompt = (f: string) => `${readFileSync(join(dir, f), 'utf8')}\n\n${common}`;
 
@@ -28,5 +28,6 @@ export function loadAgents(dir: string): { salesManager: AgentDef; communication
       communication: { agent: communication, description: 'Příprava e-mailu zákazníkovi (uveďte customer_id a obsah).' },
     },
   };
-  return { salesManager, communication };
+  const scout: AgentDef = { name: 'OPPORTUNITY_SCOUT', instructions: prompt('opportunity-scout.md'), tools: ['create_opportunity'] };
+  return { salesManager, communication, scout };
 }

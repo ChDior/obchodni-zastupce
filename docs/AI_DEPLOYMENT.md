@@ -15,6 +15,7 @@ Node.js ≥ 22. Instalace: `npm ci --legacy-peer-deps` (npm 10 má s některými
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` (výchozí `claude-opus-5-5`; levnější `claude-sonnet-5-5`), `ANTHROPIC_EFFORT`, `ANTHROPIC_FALLBACKS` | Claude. Klíč: console.anthropic.com → API keys |
 | `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_BASE_URL` | OpenAI (alternativa); bez jakéhokoli klíče chat vrací 503 |
 | `LLM_PRICE_INPUT_USD_PER_MTOK`, `LLM_PRICE_OUTPUT_USD_PER_MTOK` (+ `_CACHE_READ_`, `_CACHE_WRITE_`) | volitelně ceny modelu pro odhad nákladů na stránce „Spotřeba AI“; bez nich se ukazují jen tokeny |
+| `SEARCH_PROVIDER`, `BRAVE_SEARCH_API_KEY`, `SEARXNG_URL` | vyhledávač pro hledání zakázek: Brave Search API (klíč) nebo vlastní SearXNG (zdarma, JSON formát zapnutý); bez nich se vyhledávání nespustí |
 | `INTERNAL_TOKEN` | n8n → `/api/internal/*` |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | přímé odesílání e-mailů přes SMTP (transport `smtp`, má přednost před n8n; `SMTP_FROM` povinné) |
 | `N8N_EMAIL_WEBHOOK` | pokud prázdné, e-maily se jen zapíší do `email_outbox` (transport `log`) |
@@ -33,9 +34,12 @@ Za reverzní proxy (TLS) – aplikace sama TLS neterminuje.
 6. Ověřit na živém OpenAI klíči sadu reálných dotazů (viz AI_TESTING – manuální evaluace).
 
 ## n8n
-Hotové workflow k importu jsou v `n8n/` (follow-upy, GDPR retence; viz `n8n/README.md`, neověřeno proti živému n8n).
+Hotové workflow k importu jsou v `n8n/` (follow-upy, GDPR retence, denní vyhledávání zakázek; viz `n8n/README.md`, neověřeno proti živému n8n).
 - **Cron follow-upů:** workflow *Schedule Trigger* (např. každých 15 min) → *HTTP Request* `POST {host}/api/internal/followups/run-due`, hlavička `X-Internal-Token`. Splatné e-mailové follow-upy připraví COMMUNICATION agent (e-mail jde na schválení), ostatní vytvoří úkol ve „Ke schválení“.
 - **E-mail transport:** *Webhook* trigger přijme `{to, subject, body, ref}` → uzel SMTP/Gmail/Ecomail. Webhook URL do `N8N_EMAIL_WEBHOOK`. (Netestováno proti živému n8n.)
+
+## Vyhledávání zakázek
+1. Nastavte vyhledávač (`BRAVE_SEARCH_API_KEY` nebo `SEARXNG_URL`) a ceny modelu `LLM_PRICE_*`. 2. V `/ai-sales/policies` zadejte `scout.search_cost_usd_per_query` (cena dotazu u vašeho poskytovatele) a **stropy** `scout.monthly_budget_usd`, `scout.monthly_token_budget`, `scout.monthly_query_budget` (stropy upravujete kdykoli v administraci; běh se při dosažení kteréhokoli zastaví). 3. Vyzkoušejte ručně v `/ai-sales/opportunities` („Spustit vyhledávání teď“). 4. Až budete spokojeni, zapněte `scout.enabled` a naimportujte `n8n/scout-cron.json`. Dotazy, klíčová slova (`scout.facade_keywords`) a blokované domény se spravují v administraci. Nepřevedené nálezy se po `scout.retention_days` mažou.
 
 ## Embed widgetu
 `/widget` je výchozí `X-Frame-Options: DENY`. Pro vložení do webu nastavte `WIDGET_FRAME_ANCESTORS=https://www.beleta.cz` a vložte `<iframe src="https://ai.<doména>/widget" …>`; povolení platí jen pro `/widget`, administrace zůstává nevkládatelná.

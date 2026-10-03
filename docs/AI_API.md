@@ -35,6 +35,12 @@ Veřejné API **nemá žádný zápisový endpoint**; zápisy dělá jen AI pře
 | POST/PATCH | `…/products` · `…/products/:id` – vytvoření/úprava produktu, ceny (nová platná cena od dneška, historie se zachová), skladu, parametrů a kalkulačního pravidla; nový produkt vyžaduje `sku`, `name`, `price_net`; SKU nelze měnit; auditováno (`catalog.create/update`) | admin |
 | GET/POST/PUT/DELETE | `…/kb`, `…/kb/:id` (`{title, content, category?, active?}`, POST `…/kb/:id/active` `{active}`) – správa znalostní báze; úseky se přegenerují při uložení; zápisy jen admin, auditováno (`kb.*`); text max. 500 000 znaků | čtení všichni, zápis admin |
 | POST | `…/kb/extract` (tělo `application/pdf`, max 10 MB) → `{text, pages}` – jen náhled textu z PDF s textovou vrstvou (sken bez textu = 422 `no_text`, OCR není); uložení přes POST `…/kb` po kontrole | admin |
+| GET | `…/opportunities?status=&min_score=` · `…/opportunities/:id` – příležitosti (nález, doslovná citace, kontakt, návrh e-mailu) | všechny |
+| PATCH | `…/opportunities/:id` `{status: new|reviewed|dismissed}` | admin, sales |
+| POST | `…/opportunities/:id/promote` `{send_email?, subject?, body?}` – vytvoří zákazníka (firma, bez souhlasu) a lead (`source=outbound`) přes tools jako člověk; s `send_email` odešle upravený návrh (+ patička `scout.email_footer`); 422 `no_contact`, 409 `not_pending` | admin, sales |
+| GET | `…/scout` – rozpočet (měsíční čerpání vs. stropy), dotazy, posledních 20 běhů | všechny |
+| POST | `…/scout/run` – ruční spuštění vyhledávání | admin |
+| POST/PATCH/DELETE | `…/scout/queries`, `…/scout/queries/:id` `{query}` / `{active}` | admin |
 | GET/POST | `…/import` (popis sloupců) · `…/import/:type?dry_run=1` (`products|calc_rules|accessory_rules|shipping_zones|shipping_rates`, tělo `text/csv`, max 5 MB, vše-nebo-nic) · `…/demo/deactivate` | admin |
 | PUT | `…/policies/:key` `{value}` (typ musí odpovídat) | admin |
 
@@ -43,6 +49,7 @@ Veřejné API **nemá žádný zápisový endpoint**; zápisy dělá jen AI pře
 
 ## Interní (n8n)
 | POST | `/api/internal/followups/run-due` | hlavička `X-Internal-Token` (= `INTERNAL_TOKEN`) → `{processed}` |
+| POST | `/api/internal/scout/run` | stejný token → `{run_id, queries, pages, analysed, found, skipped?, note?}`; respektuje `scout.enabled` a měsíční stropy (n8n cron denně) |
 | POST | `/api/internal/gdpr/retention` | stejný token → `{erased, disabled}`; anonymizuje zákazníky bez souhlasu a bez otevřené/přijaté nabídky a otevřených follow-upů, neaktivní déle než politika `gdpr.retention_months` (0 = vypnuto). Doporučeno volat z n8n cronem denně. |
 
 ## Poznámky ke kompatibilitě

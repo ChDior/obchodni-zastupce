@@ -1,12 +1,15 @@
 import { join } from 'node:path';
 import { ROOT } from './paths.js';
 import { createAiCore, migrate, openPg, openPglite, runAgent, DomainError, redact,
-  type AiCore, type Db, type LlmProvider, type LlmMessage, type Source } from '../ai-core/index.js';
+  type AiCore, type Db, type LlmPricing, type LlmProvider, type LlmMessage, type Source } from '../ai-core/index.js';
 import { followupBotActor, webAdvisorActor } from './actors.js';
 import { loadAgents } from './agents.js';
 import { ensureAdmin } from './auth.js';
 import { emailTransportFromEnv, type EmailTransport } from './email.js';
+import type { FetchedDoc } from './net-safe.js';
 import { LocalKnowledge, type KnowledgeProvider } from './knowledge.js';
+import { runScout } from './scout.js';
+import type { SearchProvider } from './search.js';
 import { seedDemo } from './seed.js';
 import { buildTools } from './tools.js';
 import { randomUUID } from 'node:crypto';
@@ -15,7 +18,7 @@ export { ROOT };
 
 export interface BootstrapOptions {
   db?: Db; dataDir?: string; databaseUrl?: string; llm?: LlmProvider; emailTransport?: EmailTransport; knowledge?: KnowledgeProvider;
-  now?: () => Date; seedDemo?: boolean; admin?: { email: string; password: string }; log?: (m: string, e?: unknown) => void;
+  search?: SearchProvider; llmPricing?: LlmPricing; scoutFetcher?: (url: string) => Promise<FetchedDoc>; now?: () => Date; seedDemo?: boolean; admin?: { email: string; password: string }; log?: (m: string, e?: unknown) => void;
 }
 
 export async function bootstrap(opts: BootstrapOptions = {}) {
@@ -93,7 +96,11 @@ export async function bootstrap(opts: BootstrapOptions = {}) {
     return { processed };
   }
 
-  return { db, core, agents, llm, chat, runDueFollowups, emailTransport, close: () => db.close() };
+  /** Vyhledávání zakázek (cron z n8n nebo ruční spuštění z administrace). */
+  const scoutUa = `BeletaScoutBot/1.0 (+${process.env.PUBLIC_ORIGIN ?? 'https://beleta.cz'})`;
+  const scout = (o: { trigger: 'cron' | 'manual'; by?: string }) => runScout({ db, core, llm, search: opts.search, agent: agents.scout, pricing: opts.llmPricing ?? {}, userAgent: scoutUa, fetcher: opts.scoutFetcher }, o);
+
+  return { db, core, agents, llm, chat, runDueFollowups, scout, search: opts.search, pricing: opts.llmPricing ?? {}, emailTransport, close: () => db.close() };
 }
 export type Beleta = Awaited<ReturnType<typeof bootstrap>>;
 export type { AiCore };

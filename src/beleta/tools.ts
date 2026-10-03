@@ -6,6 +6,7 @@ import { calculateAccessories, calculateMaterial, calculateShipping } from './ca
 import * as crm from './crm.js';
 import { dailyAiEmailCount, type EmailAttachment } from './email.js';
 import { renderQuotePdf } from './quote-pdf.js';
+import { hasFacadeKeyword, csv, normQuote, scoreOpportunity, urlKey } from './scout.js';
 import type { KnowledgeProvider } from './knowledge.js';
 import { dateStr, isoDate, num } from './util.js';
 
@@ -307,6 +308,53 @@ export function buildTools({ knowledge }: BuildToolsDeps): T[] {
         const a = await approvals.create(ctx.db, { category: i.category, summary: i.summary, reason: i.reason,
           input: { customer_id: i.customer_id, lead_id: i.lead_id, project_id: i.project_id, quote_id: i.quote_id }, actor: ctx.actor, conversationId: ctx.conversationId });
         return { data: { approval_id: a.id, status: 'pending', message: 'Žádost předána obchodníkovi. Zákazníkovi nic neslibujte.' }, entity: { type: 'approval', id: a.id } };
+      },
+    }),
+
+
+    /* ----------------------- aktivní vyhledávání zakázek ----------------------- */
+    def({
+      name: 'create_opportunity', scope: SCOPES.scout, risk: 'write',
+      description: 'Uloží nalezenou příležitost (zakázku s fasádou z obkladových pásků nebo lícových cihel). POVINNÁ je doslovná citace ze stránky, která fasádu dokládá. Kontakt, který na stránce není, nelze uvést. Skóre počítá server.',
+      input: z.object({
+        url: z.string().url().max(1000), title: z.string().min(3).max(300), organization: z.string().max(200).optional(),
+        location: z.string().max(200).optional(), region: z.string().max(60).optional(),
+        stage: z.enum(['tender', 'planning', 'construction', 'completed', 'unknown']).default('unknown'),
+        facade_material: z.enum(['brick_slips', 'facing_brick', 'other']),
+        scale_note: z.string().max(300).optional().describe('Rozsah jen pokud je ve zdroji (např. plocha fasády)'),
+        evidence: z.string().min(20).max(600).describe('DOSLOVNÁ citace ze stránky dokládající fasádu z pásků/lícových cihel'),
+        contact_email: z.string().email().max(160).optional(), contact_phone: z.string().max(40).optional(), contact_name: z.string().max(120).optional(),
+        draft_subject: z.string().min(3).max(200).optional(), draft_body: z.string().min(20).max(1500).optional(),
+      }).strict(),
+      guard: async (ctx, i) => {
+        const pages = ctx.deps.scoutPages as Map<string, string> | undefined;
+        let key: string; try { key = urlKey(i.url); } catch { return { decision: 'deny', code: 'bad_url', message: 'Neplatná URL' }; }
+        const text = pages?.get(key);
+        if (text === undefined) return { decision: 'deny', code: 'not_fetched', message: 'Stránka nebyla v tomto běhu stažena – příležitost nelze uložit' };
+        if (!normQuote(text).includes(normQuote(i.evidence))) return { decision: 'deny', code: 'evidence_not_found', message: 'Citace není doslovně ve stránce' };
+        const nt = normQuote(text);
+        if (i.contact_email && !nt.includes(normQuote(i.contact_email))) return { decision: 'deny', code: 'contact_not_in_source', message: 'E-mail není na stránce' };
+        if (i.contact_phone && !nt.replace(/[\s-]/g, '').includes(i.contact_phone.replace(/[\s-]/g, ''))) return { decision: 'deny', code: 'contact_not_in_source', message: 'Telefon není na stránce' };
+        if (i.contact_name && !nt.includes(normQuote(i.contact_name))) return { decision: 'deny', code: 'contact_not_in_source', message: 'Jméno není na stránce' };
+        if ((i.draft_subject || i.draft_body) && !(i.draft_subject && i.draft_body)) return { decision: 'deny', code: 'draft_incomplete', message: 'Návrh e-mailu vyžaduje předmět i text' };
+        if (i.draft_body && !i.contact_email) return { decision: 'deny', code: 'draft_without_contact', message: 'Návrh e-mailu je možný jen s nalezeným kontaktním e-mailem' };
+        if (`${i.draft_subject ?? ''} ${i.draft_body ?? ''}`.match(/\d[\d\s.,]*\s*(Kč|CZK|€|EUR|%|korun)/i)) return { decision: 'deny', code: 'draft_has_prices', message: 'Návrh e-mailu nesmí obsahovat ceny, slevy ani čísla s měnou' };
+        return { decision: 'allow' };
+      },
+      handler: async (ctx, i): Promise<{ data: { opportunity_id: string; fit_score?: number; duplicate: boolean }; entity: { type: string; id: string }; sources?: any[] }> => {
+        const key = urlKey(i.url); const text = (ctx.deps.scoutPages as Map<string, string>).get(key)!;
+        const hits = csv(await ctx.policy.get('scout.facade_keywords', '')).filter((k) => hasFacadeKeyword(text, [k])).length;
+        const score = scoreOpportunity({ facade_material: i.facade_material, stage: i.stage, scale_note: i.scale_note, region: i.region, has_contact: !!(i.contact_email || i.contact_phone), keyword_hits: hits });
+        const ex = await ctx.db.query<any>('select id from opportunities where url_key=$1', [key]);
+        if (ex.length) return { data: { opportunity_id: ex[0].id, duplicate: true }, entity: { type: 'opportunity', id: ex[0].id } };
+        const r = await ctx.db.query<any>(
+          `insert into opportunities (url, url_key, title, organization, location, region, stage, facade_material, scale_note, evidence, fit_score,
+             contact_email, contact_phone, contact_name, draft_subject, draft_body, run_id)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) returning id`,
+          [i.url, key, i.title, i.organization ?? null, i.location ?? null, i.region ?? null, i.stage, i.facade_material, i.scale_note ?? null, i.evidence, score,
+           i.contact_email ?? null, i.contact_phone ?? null, i.contact_name ?? null, i.draft_subject ?? null, i.draft_body ?? null,
+           /^[0-9a-f-]{36}$/i.test(ctx.requestId) ? ctx.requestId : null]);
+        return { data: { opportunity_id: r[0].id, fit_score: score, duplicate: false }, entity: { type: 'opportunity', id: r[0].id }, sources: [src('web', i.url)] };
       },
     }),
 

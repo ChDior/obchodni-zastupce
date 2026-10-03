@@ -13,6 +13,7 @@
 | `tests/server.test.ts` | veřejné API · login/CSRF/role/rate limit · cookie flagy · hlavičky · admin workflow včetně schválení · interní token |
 | `tests/ops.test.ts`, `tests/gdpr-pdf.test.ts`, `tests/auth2fa.test.ts`, `tests/usage.test.ts`, `tests/import.test.ts` | SMTP transport a reset hesla · PDF nabídky · GDPR export/výmaz/retence · TOTP/záložní kódy/správa uživatelů · účtování tokenů · import CSV (vše-nebo-nic, idempotence, napojení na tools) |
 | `tests/postgres.test.ts` | adaptér `pg` (transakce, typy), souběžný audit, unikátní čísla nabídek, souběžné schválení – jen s `TEST_DATABASE_URL`; s touto proměnnou běží proti PostgreSQL i celá sada přes `makeApp` |
+| `tests/scout.test.ts` | vyhledávání zakázek: běh se simulovaným vyhledávačem/stránkami/LLM, odmítnutí vymyšlené citace/kontaktu/ceny v e-mailu, robots.txt, deduplikace, rozpočty, scope, SSRF a bezpečné stahování (včetně skutečného lokálního serveru), vyhledávací poskytovatelé, REST a převod na lead |
 
 Chybové stavy: neexistující entity, neplatné vstupy, nulové/záporné/obří hodnoty, chybějící data (cena, sklad, pravidla), cizí vazby, výpadek LLM/transportu, expirace, dvojí rozhodnutí.
 

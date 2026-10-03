@@ -40,7 +40,7 @@ const tone = (s) => ({ approved: 'ok', executed: 'ok', success: 'ok', sent: 'ok'
 const chip = (s) => h('span', { class: 'chip ' + tone(s) }, s);
 
 const PAGES = [
-  ['', 'Dashboard'], ['/leads', 'Leady'], ['/projects', 'Projekty'], ['/quotes', 'Nabídky'], ['/customers', 'Zákazníci'], ['/products', 'Katalog'], ['/kb', 'Znalostní báze'], ['/followups', 'Follow-up'],
+  ['', 'Dashboard'], ['/opportunities', 'Příležitosti'], ['/leads', 'Leady'], ['/projects', 'Projekty'], ['/quotes', 'Nabídky'], ['/customers', 'Zákazníci'], ['/products', 'Katalog'], ['/kb', 'Znalostní báze'], ['/followups', 'Follow-up'],
   ['/approvals', 'Ke schválení'], ['/activity', 'Aktivita AI'], ['/usage', 'Spotřeba AI'], ['/policies', 'Pravidla AI'], ['/security', 'Zabezpečení'],
 ];
 const path = () => location.pathname.replace(/\/+$/, '').slice(BASE.length);
@@ -172,6 +172,44 @@ const views = {
       edit ? h('div', { class: 'toolbar' }, h('button', { class: 'primary', onclick: () => openDoc(null) }, 'Nový dokument')) : null,
       table([{ label: 'Název', key: 'title' }, { label: 'Kategorie', key: 'category' }, { label: 'Zdroj', key: 'source' }, { label: 'Znaků', num: true, key: 'chars' }, { label: 'Úseků', num: true, key: 'chunks' },
         { label: 'Aktivní', render: (r) => (r.active ? 'ano' : h('span', { class: 'chip warn' }, 'ne')) }, { label: 'Upraveno', render: (r) => fmt.dt(r.updated_at) }], rows, (r) => openDoc(r.id)));
+  },
+  async '/opportunities' () {
+    const p = new URLSearchParams(location.search); const status = p.get('status') || 'new';
+    const [rows, ov] = await Promise.all([api(S('/opportunities?status=' + encodeURIComponent(status))), api(S('/scout'))]);
+    const sel = h('select', { onchange: (e) => { history.pushState({}, '', BASE + '/opportunities?status=' + e.target.value); render(); } },
+      ['new', 'reviewed', 'promoted', 'dismissed'].map((o) => h('option', { value: o, selected: o === status }, o)));
+    const num = (n) => new Intl.NumberFormat('cs-CZ').format(Math.round(n || 0));
+    const b = ov.budget;
+    const runNow = h('button', { class: 'primary', onclick: async (e) => {
+      e.target.disabled = true; toast('Vyhledávání běží, může trvat několik minut…');
+      try { const r = await api(S('/scout/run'), { method: 'POST', body: {} }); toast(r.skipped ? 'Přeskočeno: ' + r.skipped + (r.note ? ' – ' + r.note : '') : `Hotovo: ${r.pages} stránek, ${r.found} nových příležitostí`); } catch (er) { toast(er.message); }
+      render(); } }, 'Spustit vyhledávání teď');
+    const queries = () => { // správa vyhledávacích dotazů
+      const input = h('input', { placeholder: 'Nový dotaz (např. lícové cihly fasáda novostavba)' });
+      const dlg = h('dialog', {}, h('h3', {}, 'Vyhledávací dotazy'),
+        table([{ label: 'Dotaz', key: 'query' }, { label: 'Poslední běh', render: (x) => fmt.dt(x.last_run_at) },
+          { label: 'Aktivní', render: (x) => h('button', { onclick: async () => { try { await api(S('/scout/queries/' + x.id), { method: 'PATCH', body: { active: !x.active } }); dlg.close(); dlg.remove(); render(); } catch (er) { toast(er.message); } } }, x.active ? 'ano' : 'ne') },
+          { label: '', render: (x) => h('button', { class: 'danger', onclick: async () => { if (!confirm('Smazat dotaz?')) return; try { await api(S('/scout/queries/' + x.id), { method: 'DELETE' }); dlg.close(); dlg.remove(); render(); } catch (er) { toast(er.message); } } }, 'Smazat') }], ov.queries),
+        user.role === 'admin' ? h('div', { class: 'toolbar' }, input, h('button', { class: 'primary', onclick: async () => { try { await api(S('/scout/queries'), { method: 'POST', body: { query: input.value } }); toast('Přidáno'); dlg.close(); dlg.remove(); render(); } catch (er) { toast(er.message); } } }, 'Přidat')) : null,
+        h('div', { class: 'toolbar' }, h('button', { onclick: () => { dlg.close(); dlg.remove(); } }, 'Zavřít')));
+      document.body.append(dlg); dlg.showModal();
+    };
+    return h('div', {}, h('h2', {}, 'Příležitosti – zakázky s fasádou z obkladových pásků / lícových cihel'),
+      h('p', { class: 'muted' }, 'AI hledá na internetu a ukládá jen nálezy s doslovnou citací ze zdroje. Nikoho sama neoslovuje – kontakt a úvodní e-mail schvaluje a odesílá člověk.'),
+      h('p', {}, 'Vyhledávač: ', ov.search_configured ? h('span', { class: 'chip ok' }, ov.search_provider) : h('span', { class: 'chip bad' }, 'nenastaven (SEARCH_PROVIDER / BRAVE_SEARCH_API_KEY / SEARXNG_URL)'),
+        ' · automatický běh: ', h('span', { class: 'chip ' + (ov.enabled ? 'ok' : 'warn') }, ov.enabled ? 'zapnut' : 'vypnut')),
+      h('p', {}, `Tento měsíc: dotazy ${num(b.spent.queries)} / ${num(b.caps.queries)} · tokeny ${num(b.spent.tokens)} / ${num(b.caps.tokens)}`
+        + (b.spent.usd != null ? ` · odhad nákladů $${b.spent.usd.toFixed(2)} / $${b.caps.usd}` : ' · náklady v USD: nastavte LLM_PRICE_* nebo cenu dotazu v pravidlech')
+        + (b.allowed ? '' : ' · ZASTAVENO: ' + b.reason)),
+      h('div', { class: 'toolbar' }, user.role === 'admin' ? runNow : null, h('button', { onclick: queries }, 'Vyhledávací dotazy (' + ov.queries.filter((x) => x.active).length + ')'),
+        h('a', { href: BASE + '/policies', onclick: (e) => { e.preventDefault(); go('/policies'); } }, 'Stropy a limity (Pravidla AI → scout.*)'), sel),
+      table([{ label: 'Skóre', num: true, key: 'fit_score' }, { label: 'Název', key: 'title' }, { label: 'Organizace', render: (r) => r.organization || '–' }, { label: 'Kraj', render: (r) => r.region || '–' },
+        { label: 'Fáze', key: 'stage' }, { label: 'Materiál', key: 'facade_material' }, { label: 'Kontakt', render: (r) => [r.has_email && 'e-mail', r.has_phone && 'tel.'].filter(Boolean).join(', ') || '–' },
+        { label: 'Návrh e-mailu', render: (r) => (r.has_draft ? 'ano' : '–') }, { label: 'Nalezeno', render: (r) => fmt.dt(r.found_at) }], rows, (r) => openOpportunity(r.id)),
+      h('h3', {}, 'Poslední běhy'),
+      table([{ label: 'Start', render: (r) => fmt.dt(r.started_at) }, { label: 'Spuštění', key: 'trigger' }, { label: 'Stav', render: (r) => chip(r.status) }, { label: 'Dotazů', num: true, key: 'queries' },
+        { label: 'Stránek', num: true, key: 'pages' }, { label: 'Vyhodnoceno', num: true, key: 'analysed' }, { label: 'Nalezeno', num: true, key: 'found' },
+        { label: 'Tokeny', num: true, render: (r) => num(r.input_tokens + r.output_tokens) }, { label: 'Poznámka', render: (r) => r.note || '' }], ov.runs));
   },
   async '/usage' () {
     const d = new URLSearchParams(location.search).get('days') || '30';
@@ -342,6 +380,33 @@ async function openDoc(id) {
     h('div', { class: 'form' }, h('label', {}, 'Název'), title, h('label', {}, 'Kategorie'), cat, h('label', {}, 'Aktivní'), active, edit ? [h('label', {}, 'Načíst ze souboru (.md, .txt, .pdf)'), file] : null, h('label', {}, 'Text'), content),
     h('p', { class: 'muted' }, 'Text se dělí na úseky po odstavcích (prázdný řádek). Pište jeden fakt na odstavec a uvádějte název produktu.'),
     h('div', { class: 'toolbar' }, edit ? h('button', { class: 'primary', onclick: save }, 'Uložit') : null, edit && id ? h('button', { class: 'danger', onclick: del }, 'Smazat') : null, h('button', { onclick: () => { dlg.close(); dlg.remove(); } }, 'Zavřít')));
+  document.body.append(dlg); dlg.showModal();
+}
+
+async function openOpportunity(id) {
+  const o = await api(S('/opportunities/' + id)); const canWrite = user.role !== 'viewer'; const open = o.status !== 'promoted';
+  const subject = h('input', { value: o.draft_subject || '', disabled: !canWrite || !open });
+  const text = h('textarea', { rows: '9', disabled: !canWrite || !open }, o.draft_body || '');
+  const safeUrl = /^https?:\/\//i.test(o.url) ? o.url : null;
+  const setStatus = (status) => async () => { try { await api(S('/opportunities/' + id), { method: 'PATCH', body: { status } }); toast('Uloženo'); dlg.close(); dlg.remove(); render(); } catch (e) { toast(e.message); } };
+  const promote = (send) => async () => {
+    if (send && !confirm('Vytvořit zákazníka a lead a ODESLAT e-mail na ' + o.contact_email + '?\nOdesíláte jako člověk – ověřte text a oprávněnost oslovení.')) return;
+    try {
+      const r = await api(S('/opportunities/' + id + '/promote'), { method: 'POST', body: send ? { send_email: true, subject: subject.value, body: text.value } : {} });
+      toast(send ? (r.email?.status === 'sent' ? 'Lead vytvořen, e-mail odeslán' : 'Lead vytvořen, e-mail se nepodařilo odeslat') : 'Lead vytvořen'); dlg.close(); dlg.remove(); render();
+    } catch (e) { toast(e.message); }
+  };
+  const dlg = h('dialog', {}, h('h3', {}, o.title), h('p', { class: 'muted' }, [o.organization, o.location, o.region].filter(Boolean).join(' · ') || '–'),
+    h('p', {}, 'Zdroj: ', safeUrl ? h('a', { href: safeUrl, target: '_blank', rel: 'noopener noreferrer' }, o.url) : o.url),
+    h('p', {}, `Skóre ${o.fit_score} · fáze ${o.stage} · materiál ${o.facade_material}` + (o.scale_note ? ' · rozsah: ' + o.scale_note : '') + ' · stav: ', chip(o.status)),
+    h('h4', {}, 'Doslovná citace ze zdroje'), h('blockquote', {}, o.evidence),
+    h('h4', {}, 'Kontakt ze zdroje'), h('p', {}, [o.contact_email, o.contact_phone, o.contact_name].filter(Boolean).join(' · ') || 'žádný nalezen'),
+    o.draft_body ? [h('h4', {}, 'Návrh úvodního e-mailu (AI – zkontrolujte a upravte)'), subject, text, h('p', { class: 'muted' }, 'Při odeslání se připojí patička: ' + o.email_footer)] : null,
+    h('div', { class: 'toolbar' }, canWrite && open ? [
+      h('button', { onclick: setStatus('reviewed') }, 'Prověřeno'), h('button', { class: 'danger', onclick: setStatus('dismissed') }, 'Zamítnout'),
+      (o.contact_email || o.contact_phone) ? h('button', { onclick: promote(false) }, 'Převést na lead') : null,
+      o.contact_email && o.draft_body ? h('button', { class: 'primary', onclick: promote(true) }, 'Převést na lead a odeslat e-mail') : null] : null,
+      h('button', { onclick: () => { dlg.close(); dlg.remove(); } }, 'Zavřít')));
   document.body.append(dlg); dlg.showModal();
 }
 

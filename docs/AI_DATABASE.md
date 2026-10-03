@@ -29,4 +29,4 @@ PostgreSQL dialekt (`gen_random_uuid`, JSONB, plpgsql trigger). Migrace v `db/co
 
 
 ## Novější migrace
-`db/core/002_llm_usage.sql` (`ai_llm_usage` – tokeny a model per volání LLM, bez obsahu) · `db/beleta/004_gdpr_pdf.sql` (`customers.erased_at`, `gdpr_erasures`, politiky `gdpr.retention_months`, `quote.pdf_*`) · `db/beleta/005_2fa_users.sql` (TOTP sloupce v `admin_users`).
+`db/core/003_rate_limits.sql` (sdílený limiter) · `db/beleta/006_quote_numbering.sql` · `db/beleta/007_kb_updated.sql` · `db/beleta/008_scout.sql` (`scout_queries`, `scout_runs`, `scout_seen`, `opportunities`, politiky `scout.*`) · `db/core/002_llm_usage.sql` (`ai_llm_usage` – tokeny a model per volání LLM, bez obsahu) · `db/beleta/004_gdpr_pdf.sql` (`customers.erased_at`, `gdpr_erasures`, politiky `gdpr.retention_months`, `quote.pdf_*`) · `db/beleta/005_2fa_users.sql` (TOTP sloupce v `admin_users`).

@@ -9,6 +9,7 @@ Agent = `{name, instructions, tools[] (whitelist), delegates}`. Runtime: `runAge
 | TECHNICAL_AGENT | search_knowledge, get_product | Technické odpovědi jen z dokumentace |
 | CALCULATION_AGENT | calculate_*, get_price, check_stock | Kalkulace |
 | LEAD_AGENT | create_customer, create_lead, update_lead, create_project, update_project, create_quote, update_quote, create_followup, request_human_approval | CRM a nabídky |
+| OPPORTUNITY_SCOUT | create_opportunity | Vyhodnotí text stažené stránky a uloží příležitost s citací (spouští ho `runScout`, ne zákaznický chat; SALES_MANAGER ho nevolá) |
 | COMMUNICATION_AGENT | send_email, create_followup, get_price, check_stock | E-maily a follow-upy (též z n8n cronu) |
 
 ## Pravidla runtime

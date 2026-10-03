@@ -1,6 +1,6 @@
 # Aktivní vyhledávání zakázek (R-23) – návrh
 
-**Stav: schválený úkol, zatím neimplementováno.** Cíl: AI autonomně hledá na internetu zakázky a stavby, kde se plánuje **fasáda z obkladových pásků nebo lícových cihel** (cihelné pásky, lícové zdivo, cihlový obklad), a předává je obchodníkům jako příležitosti ke zpracování. Autonomní ≠ bez kontroly: AI hledá a vyhodnocuje, **kontaktuje zákazníky až člověk**.
+**Stav: implementováno (v1), neověřeno na živém vyhledávači a živých webech.** Cíl: AI autonomně hledá na internetu zakázky a stavby, kde se plánuje **fasáda z obkladových pásků nebo lícových cihel** (cihelné pásky, lícové zdivo, cihlový obklad), a předává je obchodníkům jako příležitosti ke zpracování. Autonomní ≠ bez kontroly: AI hledá a vyhodnocuje, **kontaktuje zákazníky až člověk**.
 
 ## Co hledá
 - Veřejné zakázky (profily zadavatelů, Věstník veřejných zakázek, NEN a podobné) – rekonstrukce a novostavby s lícovou/cihlovou fasádou.
@@ -32,3 +32,11 @@ Mockovaný vyhledávač a stahování: nalezení a uložení příležitosti se 
 2. Priorita zdrojů (veřejné zakázky / developeři / úřední desky / architekti) a cílové regiony.
 3. Měsíční strop nákladů na vyhledávání.
 4. Zda smí AI jen navrhnout kontakt, nebo i připravit (ke schválení) úvodní e-mail.
+
+## Implementace (v1) a odchylky od návrhu
+- **Vyhledávač:** vyměnitelné rozhraní; implementovány **Brave Search API** (cenu a bezplatný limit ověřte v aktuálním ceníku poskytovatele) a **SearXNG** (vlastní instance, bez poplatku za dotazy). Cena dotazu se zadává v politice `scout.search_cost_usd_per_query`.
+- **Stahování a hledání dělá server, ne model** (levnější a bezpečnější): model dostane jen text jediné stránky a smí jen zavolat `create_opportunity`. Stránka bez klíčových slov (`scout.facade_keywords`, shoda i v různých pádech) se k modelu vůbec nedostane.
+- **Náklady:** tři měsíční stropy v administraci (`scout.monthly_budget_usd`, `scout.monthly_token_budget`, `scout.monthly_query_budget`) + limity na běh (`scout.max_queries_per_run`, `scout.max_pages_per_run`); čerpání viz stránka Příležitosti.
+- **Návrh e-mailu** vzniká společně s kontaktem (jen když je e-mail na stránce); odeslání provádí člověk v administraci.
+- **Region:** celá ČR (dotazy v češtině, `country=CZ` u Brave).
+- **Chybí:** zdroje se strukturovaným API (např. registry veřejných zakázek přímo), OCR skenů, filtr podle kraje v seznamu, automatická kontrola právní způsobilosti oslovení, učení se z výsledků (které nálezy skončily obchodem).

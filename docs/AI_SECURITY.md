@@ -41,5 +41,11 @@ Chybí perzistentní rate limiting, penetrační test, skenování závislostí 
 ## GDPR
 Výmaz = anonymizace (`src/beleta/gdpr.ts`): řádek zákazníka zůstává (vazby, účetní integrita), osobní údaje, poznámky, e-maily v outboxu, konverzace a vstupy schválení se mažou/nulují. Audit je append-only a PII neobsahuje, hash řetěz zůstává platný; výmaz i export se auditují (`gdpr.erase`, `gdpr.export`) a evidují v `gdpr_erasures`. Retence řízena politikou `gdpr.retention_months`.
 
+## Vyhledávání zakázek (OPPORTUNITY SCOUT)
+- **SSRF:** `safeFetch` povoluje jen http/https na portech 80/443, bez přihlašovacích údajů v URL; DNS se ověřuje při samotném spojení (blokuje soukromé, loopback, link-local, CGNAT a multicast adresy včetně IPv6, odolné proti DNS rebindingu), přesměrování se sleduje ručně (max 3) a každé se ověřuje znovu; limit velikosti (1,5 MB) a času. Ve výrobním kódu nelze povolit soukromé adresy (volba `allowPrivate` existuje jen pro testy).
+- **Etiketa:** respektuje `robots.txt` (chyba/5xx = zákaz, 404 = povoleno), identifikovatelný User-Agent `BeletaScoutBot`, nízká frekvence (limity stránek a dotazů na běh), blokované domény v politice.
+- **AI nevymýšlí:** záznam vznikne jen přes tool `create_opportunity`, který ověří, že stažená stránka obsahuje doslovnou citaci i každý uvedený kontakt; návrh e-mailu nesmí obsahovat ceny. Text stránky je pro model „data, ne instrukce“ (obrana proti prompt injection). Scout nemá žádné jiné nástroje (scope `scout:write`) a nemůže e-mail odeslat.
+- **Člověk rozhoduje:** nález se na lead převádí a e-mail odesílá výhradně ručně z administrace; nová firma vzniká bez marketingového souhlasu. Nepřevedené nálezy se po `scout.retention_days` mažou. Zákonnost oslovení (zák. 480/2004 § 7, GDPR) je odpovědností odesílatele – ověřte s právníkem.
+
 ## 2FA a uživatelé
 TOTP (RFC 6238, bez externích závislostí, tolerance ±1 krok, ochrana proti opakování použitého kódu) + 8 jednorázových záložních kódů (v DB jen SHA-256). Tajný klíč TOTP je v DB v čistém textu (chraňte DB/zálohy). Zapnutí 2FA se vynucuje jen organizačně (není povinné). Ztracené 2FA resetuje admin v `/ai-sales/users`; ztracené heslo/2FA posledního admina: `npm run reset-password` (změní heslo, vypne 2FA).
