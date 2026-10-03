@@ -24,7 +24,7 @@ async function api(path, opts = {}) {
   });
   if (res.status === 401 && path !== '/login' && path !== '/me') { user = null; render(); throw new Error('unauthorized'); }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error?.message || data.pending_approval?.message || 'Chyba ' + res.status);
+  if (!res.ok) { const er = new Error(data.error?.message || data.pending_approval?.message || 'Chyba ' + res.status); er.code = data.error?.code; throw er; }
   return data;
 }
 const S = (p) => '/ai-sales' + p;
@@ -41,7 +41,7 @@ const chip = (s) => h('span', { class: 'chip ' + tone(s) }, s);
 
 const PAGES = [
   ['', 'Dashboard'], ['/leads', 'Leady'], ['/projects', 'Projekty'], ['/quotes', 'Nabídky'], ['/followups', 'Follow-up'],
-  ['/approvals', 'Ke schválení'], ['/activity', 'Aktivita AI'], ['/policies', 'Pravidla AI'],
+  ['/approvals', 'Ke schválení'], ['/activity', 'Aktivita AI'], ['/policies', 'Pravidla AI'], ['/security', 'Zabezpečení'],
 ];
 const path = () => location.pathname.replace(/\/+$/, '').slice(BASE.length);
 function go(p) { history.pushState({}, '', BASE + p); render(); }
@@ -141,6 +141,47 @@ const views = {
         { label: 'Entita', render: (r) => r.entity_type ? `${r.entity_type}:${String(r.entity_id).slice(0, 8)}` : '' }, { label: 'ms', num: true, render: (r) => r.duration_ms ?? '' },
       ], rows, (r) => showJson('Záznam #' + r.id, r)));
   },
+  async '/security' () {
+    const me = (await api('/me')).user;
+    const box = h('div', {});
+    const showCodes = (codes) => box.replaceChildren(h('h3', {}, '2FA zapnuto'), h('p', {}, 'Uložte si záložní kódy na bezpečné místo. Každý jde použít jednou a znovu se nezobrazí.'), h('pre', {}, codes.join('\n')), h('button', { onclick: render }, 'Hotovo'));
+    if (me.totp_enabled) {
+      const pw = h('input', { type: 'password', placeholder: 'Heslo', autocomplete: 'current-password' });
+      const code = h('input', { placeholder: 'Kód z aplikace / záložní kód', autocomplete: 'one-time-code' });
+      box.append(h('p', {}, 'Dvoufázové ověření: ', h('span', { class: 'chip ok' }, 'zapnuto')), h('div', { class: 'toolbar' }, pw, code,
+        h('button', { class: 'danger', onclick: async () => { try { await api('/2fa/disable', { method: 'POST', body: { password: pw.value, code: code.value } }); toast('2FA vypnuto'); render(); } catch (e) { toast(e.message); } } }, 'Vypnout 2FA')));
+    } else {
+      box.append(h('p', {}, 'Dvoufázové ověření: ', h('span', { class: 'chip warn' }, 'vypnuto')),
+        h('button', { class: 'primary', onclick: async () => {
+          try {
+            const r = await api('/2fa/setup', { method: 'POST' });
+            const code = h('input', { placeholder: '6místný kód', inputmode: 'numeric', autocomplete: 'one-time-code' });
+            box.replaceChildren(h('p', {}, 'V autentizační aplikaci (Google Authenticator, Authy, 1Password…) přidejte účet ručně s tímto klíčem:'), h('pre', {}, r.secret),
+              h('details', {}, h('summary', {}, 'otpauth adresa'), h('pre', {}, r.otpauth_uri)),
+              h('div', { class: 'toolbar' }, code, h('button', { class: 'primary', onclick: async () => { try { showCodes((await api('/2fa/enable', { method: 'POST', body: { code: code.value } })).recovery_codes); } catch (e) { toast(e.message); } } }, 'Zapnout')));
+          } catch (e) { toast(e.message); }
+        } }, 'Zapnout 2FA'));
+    }
+    return h('div', {}, h('h2', {}, 'Zabezpečení účtu'), h('p', { class: 'muted' }, me.email), box,
+      me.role === 'admin' ? h('p', {}, h('a', { href: BASE + '/users', onclick: (e) => { e.preventDefault(); go('/users'); } }, 'Správa uživatelů →')) : null);
+  },
+  async '/users' () {
+    if (user.role !== 'admin') return h('div', { class: 'empty' }, 'Jen pro administrátory.');
+    const rows = await api(S('/users'));
+    const patch = (id, body) => async () => { try { await api(S('/users/' + id), { method: 'PATCH', body }); toast('Uloženo'); render(); } catch (e) { toast(e.message); } };
+    const email = h('input', { type: 'email', placeholder: 'E-mail', autocomplete: 'off' });
+    const name = h('input', { placeholder: 'Jméno' });
+    const role = h('select', {}, ['sales', 'viewer', 'admin'].map((r) => h('option', { value: r }, r)));
+    const pw = h('input', { type: 'password', placeholder: 'Heslo (min. 12 znaků)', autocomplete: 'new-password' });
+    const add = h('button', { class: 'primary', onclick: async () => { try { await api(S('/users'), { method: 'POST', body: { email: email.value, name: name.value, role: role.value, password: pw.value } }); toast('Uživatel vytvořen'); render(); } catch (e) { toast(e.message); } } }, 'Přidat');
+    return h('div', {}, h('h2', {}, 'Uživatelé'),
+      table([{ label: 'E-mail', key: 'email' }, { label: 'Jméno', key: 'name' },
+        { label: 'Role', render: (r) => h('select', { onchange: (e) => patch(r.id, { role: e.target.value })() }, ['admin', 'sales', 'viewer'].map((x) => h('option', { value: x, selected: x === r.role }, x))) },
+        { label: 'Aktivní', render: (r) => h('button', { onclick: patch(r.id, { active: !r.active }) }, r.active ? 'Deaktivovat' : 'Aktivovat') },
+        { label: '2FA', render: (r) => r.totp_enabled ? h('button', { onclick: patch(r.id, { reset_2fa: true }) }, 'Zrušit 2FA') : 'vypnuto' },
+        { label: 'Heslo', render: (r) => h('button', { onclick: () => { const v = prompt('Nové heslo (min. 12 znaků):'); if (v) patch(r.id, { password: v })(); } }, 'Změnit') }], rows),
+      h('h3', {}, 'Nový uživatel'), h('div', { class: 'toolbar' }, email, name, role, pw, add));
+  },
   async '/policies' () {
     const rows = await api(S('/policies'));
     return h('div', {}, h('h2', {}, 'Pravidla AI'), h('p', { class: 'muted' }, 'Limity pravomocí AI. Mění je jen administrátor; každá změna se zapisuje do auditu.'),
@@ -174,11 +215,17 @@ async function openQuote(r) {
 function loginView() {
   const email = h('input', { type: 'email', autocomplete: 'username', required: true });
   const pw = h('input', { type: 'password', autocomplete: 'current-password', required: true });
+  const code = h('input', { type: 'text', inputmode: 'numeric', autocomplete: 'one-time-code', maxlength: '16', placeholder: '6 číslic nebo záložní kód' });
+  const codeRow = h('div', { hidden: true }, h('label', {}, 'Ověřovací kód (2FA)'), code);
   const err = h('div', { class: 'err' });
   const form = h('form', { class: 'login', onsubmit: async (e) => {
     e.preventDefault(); err.textContent = '';
-    try { const r = await api('/login', { method: 'POST', body: { email: email.value, password: pw.value } }); user = r.user; render(); } catch (ex) { err.textContent = ex.message; }
-  } }, h('h1', {}, 'AI SALES – přihlášení'), h('label', {}, 'E-mail'), email, h('label', {}, 'Heslo'), pw, h('button', { class: 'primary', type: 'submit' }, 'Přihlásit'), err);
+    try {
+      const r = await api('/login', { method: 'POST', body: { email: email.value, password: pw.value, code: code.value || undefined } }); user = r.user; render();
+    } catch (ex) {
+      if (ex.code === 'totp_required') { codeRow.hidden = false; code.focus(); err.textContent = 'Zadejte ověřovací kód z aplikace.'; } else err.textContent = ex.message;
+    }
+  } }, h('h1', {}, 'AI SALES – přihlášení'), h('label', {}, 'E-mail'), email, h('label', {}, 'Heslo'), pw, codeRow, h('button', { class: 'primary', type: 'submit' }, 'Přihlásit'), err);
   return form;
 }
 

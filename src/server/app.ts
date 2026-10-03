@@ -8,7 +8,7 @@ import { humanActor, publicActor } from '../beleta/actors.js';
 import * as admin from '../beleta/admin.js';
 import { eraseCustomer, exportCustomer, runRetention } from '../beleta/gdpr.js';
 import { renderQuotePdf } from '../beleta/quote-pdf.js';
-import { login, logout, userForToken, type AdminUser } from '../beleta/auth.js';
+import { createUser, listUsers, login, logout, totpDisable, totpEnable, totpEnabledFor, totpSetup, updateUser, userForToken, type AdminUser } from '../beleta/auth.js';
 import { ROOT, type Beleta } from '../beleta/bootstrap.js';
 import { RateLimiter } from './ratelimit.js';
 
@@ -29,7 +29,7 @@ const uuid = z.string().uuid();
 const STATUS_BY_CODE: Record<string, number> = {
   validation_error: 400, bad_message: 400, forbidden: 403, invalid_credentials: 401, unknown_tool: 404, not_found: 404,
   product_not_found: 404, price_not_found: 404, stock_unknown: 404, customer_not_found: 404, lead_not_found: 404, project_not_found: 404, quote_not_found: 404,
-  not_pending: 409, already_erased: 409, ai_unavailable: 503, denied: 403,
+  not_pending: 409, already_erased: 409, user_exists: 409, totp_required: 401, invalid_code: 400, totp_already_enabled: 409, totp_not_enabled: 409, ai_unavailable: 503, denied: 403,
 };
 
 export async function buildServer(app: Beleta, cfg: ServerConfig) {
@@ -157,21 +157,40 @@ export async function buildServer(app: Beleta, cfg: ServerConfig) {
   const needAdmin = (req: FastifyRequest) => { if (me(req).user.role !== 'admin') throw new DomainError('forbidden', 'Jen administrátor'); };
 
   f.post('/api/admin/login', async (req, reply) => {
-    const b = z.object({ email: z.string().max(200), password: z.string().max(200) }).safeParse(req.body);
+    const b = z.object({ email: z.string().max(200), password: z.string().max(200), code: z.string().max(32).optional() }).safeParse(req.body);
     if (!b.success) throw new DomainError('validation_error', 'Chybí e-mail nebo heslo');
     if (!loginLimiter.take(`${req.ip}|${b.data.email.toLowerCase()}`)) return reply.code(429).send({ error: { code: 'rate_limited', message: 'Příliš mnoho pokusů, zkuste to později' } });
     try {
-      const { token, user } = await login(app.db, b.data.email, b.data.password);
+      const { token, user } = await login(app.db, b.data.email, b.data.password, 8, b.data.code);
       await app.core.audit.record(app.db, { actor_type: 'human', actor_id: `human:${user.email}`, action: 'auth.login', status: 'success' });
       reply.header('set-cookie', cookie(token, 8 * 3600));
       return { user };
     } catch (e) {
+      if (e instanceof DomainError && e.code === 'totp_required') throw e; // běžný krok přihlášení, ne selhání
       await app.core.audit.record(app.db, { actor_type: 'system', actor_id: 'system:auth', action: 'auth.login', status: 'denied', error_code: 'invalid_credentials' });
       throw e;
     }
   });
   f.post('/api/admin/logout', async (req, reply) => { await logout(app.db, me(req).token); reply.header('set-cookie', cookie('', 0)); return { ok: true }; });
-  f.get('/api/admin/me', async (req) => ({ user: me(req).user }));
+  f.get('/api/admin/me', async (req) => ({ user: { ...me(req).user, totp_enabled: await totpEnabledFor(app.db, me(req).user.id) } }));
+  const auditHuman = (req: FastifyRequest, action: string, entity_id?: string, output?: unknown) =>
+    app.core.audit.record(app.db, { actor_type: 'human', actor_id: humanActor(me(req).user).id, action, status: 'success', entity_type: 'user', entity_id, output });
+  const body = <T extends z.ZodTypeAny>(schema: T, req: FastifyRequest): z.infer<T> => {
+    const r = schema.safeParse(req.body ?? {}); if (!r.success) throw new DomainError('validation_error', 'Neplatný požadavek'); return r.data;
+  };
+  f.post('/api/admin/2fa/setup', async (req) => totpSetup(app.db, me(req).user.id));
+  f.post('/api/admin/2fa/enable', async (req) => {
+    const b = body(z.object({ code: z.string().max(32) }), req);
+    const codes = await totpEnable(app.db, me(req).user.id, b.code, app.core.now().getTime());
+    await auditHuman(req, 'auth.2fa_enable', me(req).user.id);
+    return { recovery_codes: codes };
+  });
+  f.post('/api/admin/2fa/disable', async (req) => {
+    const b = body(z.object({ password: z.string().max(200), code: z.string().max(32) }), req);
+    await totpDisable(app.db, me(req).user.id, b.password, b.code);
+    await auditHuman(req, 'auth.2fa_disable', me(req).user.id);
+    return { ok: true };
+  });
 
   const S = '/api/admin/ai-sales';
   const q = (req: FastifyRequest) => req.query as Record<string, string | undefined>;
@@ -199,6 +218,22 @@ export async function buildServer(app: Beleta, cfg: ServerConfig) {
     needAdmin(req);
     const id = uuid.safeParse((req.params as any).id); if (!id.success) throw new DomainError('validation_error', 'Neplatné id');
     await eraseCustomer(app.db, app.core.audit, id.data, humanActor(me(req).user).id);
+    return { ok: true };
+  });
+  f.get(`${S}/users`, async (req) => { needAdmin(req); return listUsers(app.db); });
+  f.post(`${S}/users`, async (req) => {
+    needAdmin(req);
+    const b = body(z.object({ email: z.string().max(200), name: z.string().max(200).optional(), role: z.enum(['admin', 'sales', 'viewer']), password: z.string().max(200) }), req);
+    const id = await createUser(app.db, b);
+    await auditHuman(req, 'user.create', id, { role: b.role });
+    return { id };
+  });
+  f.patch(`${S}/users/:id`, async (req) => {
+    needAdmin(req);
+    const id = uuid.safeParse((req.params as any).id); if (!id.success) throw new DomainError('validation_error', 'Neplatné id');
+    const b = body(z.object({ role: z.enum(['admin', 'sales', 'viewer']).optional(), active: z.boolean().optional(), password: z.string().max(200).optional(), reset_2fa: z.boolean().optional(), name: z.string().max(200).optional() }).strict(), req);
+    await updateUser(app.db, me(req).user.id, id.data, b);
+    await auditHuman(req, 'user.update', id.data, { role: b.role, active: b.active, password_reset: b.password !== undefined, reset_2fa: b.reset_2fa });
     return { ok: true };
   });
   f.get(`${S}/followups`, async (req) => { const p = paging(req); return admin.listFollowups(app.db, q(req).status, p.limit, p.offset); });
