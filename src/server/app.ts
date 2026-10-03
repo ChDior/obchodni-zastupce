@@ -14,11 +14,11 @@ import { IMPORT_TYPES, deactivateDemo, importCsv, importHelp, type ImportType } 
 import { renderQuotePdf } from '../beleta/quote-pdf.js';
 import { createUser, listUsers, login, logout, totpDisable, totpEnable, totpEnabledFor, totpSetup, updateUser, userForToken, type AdminUser } from '../beleta/auth.js';
 import { ROOT, type Beleta } from '../beleta/bootstrap.js';
-import { RateLimiter } from './ratelimit.js';
+import { DbRateLimiter, RateLimiter, type Limiter } from './ratelimit.js';
 
 export interface ServerConfig {
   publicOrigin: string; internalToken?: string; widgetFrameAncestors?: string[]; secureCookies: boolean; trustProxy: boolean;
-  llmPricing?: LlmPricing; chatPerMinute?: number; loginMax?: number; publicPerMinute?: number;
+  llmPricing?: LlmPricing; sharedRateLimit?: boolean; chatPerMinute?: number; loginMax?: number; publicPerMinute?: number;
 }
 
 const COOKIE = 'beleta_session';
@@ -38,9 +38,11 @@ const STATUS_BY_CODE: Record<string, number> = {
 
 export async function buildServer(app: Beleta, cfg: ServerConfig) {
   const f = Fastify({ logger: false, bodyLimit: 64 * 1024, trustProxy: cfg.trustProxy });
-  const chatLimiter = new RateLimiter(cfg.chatPerMinute ?? 12, 60_000);
-  const publicLimiter = new RateLimiter(cfg.publicPerMinute ?? 120, 60_000);
-  const loginLimiter = new RateLimiter(cfg.loginMax ?? 8, 15 * 60_000);
+  // více instancí nad jednou DB: limity v DB (cfg.sharedRateLimit); jinak paměť procesu
+  const mkLimiter = (name: string, max: number, windowMs: number): Limiter => (cfg.sharedRateLimit ? new DbRateLimiter(app.db, name, max, windowMs) : new RateLimiter(max, windowMs));
+  const chatLimiter = mkLimiter('chat', cfg.chatPerMinute ?? 12, 60_000);
+  const publicLimiter = mkLimiter('public', cfg.publicPerMinute ?? 120, 60_000);
+  const loginLimiter = mkLimiter('login', cfg.loginMax ?? 8, 15 * 60_000);
   // prázdné tělo s Content-Type: application/json (UI posílá hlavičku i u POST/DELETE bez těla) není chyba
   f.removeContentTypeParser('application/json');
   f.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, raw, done) => {
@@ -93,18 +95,18 @@ export async function buildServer(app: Beleta, cfg: ServerConfig) {
   }
 
   /* ---------- veřejné API (jen čtení + chat) ---------- */
-  const limitPublic = (req: FastifyRequest, reply: FastifyReply, l: RateLimiter) => {
-    if (!l.take(req.ip)) { reply.code(429).header('retry-after', '60').send({ error: { code: 'rate_limited', message: 'Příliš mnoho požadavků' } }); return false; }
+  const limitPublic = async (req: FastifyRequest, reply: FastifyReply, l: Limiter) => {
+    if (!(await l.take(req.ip))) { reply.code(429).header('retry-after', '60').send({ error: { code: 'rate_limited', message: 'Příliš mnoho požadavků' } }); return false; }
     return true;
   };
 
   f.get('/api/public/products', async (req, reply) => {
-    if (!limitPublic(req, reply, publicLimiter)) return;
+    if (!(await limitPublic(req, reply, publicLimiter))) return;
     const q = req.query as Record<string, string | undefined>;
     return sendResult(reply, await runTool('search_products', { query: q.q, category: q.category, limit: q.limit ? Number(q.limit) : undefined }));
   });
   f.get('/api/public/products/:ref', async (req, reply) => {
-    if (!limitPublic(req, reply, publicLimiter)) return;
+    if (!(await limitPublic(req, reply, publicLimiter))) return;
     const ref = (req.params as any).ref as string;
     const p = await runTool('get_product', { product: ref });
     if (p.status !== 'ok') return sendResult(reply, p);
@@ -114,7 +116,7 @@ export async function buildServer(app: Beleta, cfg: ServerConfig) {
       sources: [...p.sources, ...(price.status === 'ok' ? price.sources : []), ...(stock.status === 'ok' ? stock.sources : [])] };
   });
   f.post('/api/public/calculate', async (req, reply) => {
-    if (!limitPublic(req, reply, publicLimiter)) return;
+    if (!(await limitPublic(req, reply, publicLimiter))) return;
     const b = (req.body ?? {}) as any;
     const m = await runTool('calculate_material', { product: b.product, area_m2: b.area_m2 });
     if (m.status !== 'ok') return sendResult(reply, m);
@@ -122,7 +124,7 @@ export async function buildServer(app: Beleta, cfg: ServerConfig) {
     return { data: { material: m.data, accessories: acc.status === 'ok' ? acc.data.items : [] }, sources: [...m.sources, ...(acc.status === 'ok' ? acc.sources : [])] };
   });
   f.post('/api/public/chat', async (req, reply) => {
-    if (!limitPublic(req, reply, chatLimiter)) return;
+    if (!(await limitPublic(req, reply, chatLimiter))) return;
     const b = z.object({ message: z.string(), conversation_id: z.string().optional() }).safeParse(req.body);
     if (!b.success) throw new DomainError('validation_error', 'Chybí message');
     const r = await app.chat({ message: b.data.message, conversationId: b.data.conversation_id });
@@ -172,7 +174,7 @@ export async function buildServer(app: Beleta, cfg: ServerConfig) {
   f.post('/api/admin/login', async (req, reply) => {
     const b = z.object({ email: z.string().max(200), password: z.string().max(200), code: z.string().max(32).optional() }).safeParse(req.body);
     if (!b.success) throw new DomainError('validation_error', 'Chybí e-mail nebo heslo');
-    if (!loginLimiter.take(`${req.ip}|${b.data.email.toLowerCase()}`)) return reply.code(429).send({ error: { code: 'rate_limited', message: 'Příliš mnoho pokusů, zkuste to později' } });
+    if (!(await loginLimiter.take(`${req.ip}|${b.data.email.toLowerCase()}`))) return reply.code(429).send({ error: { code: 'rate_limited', message: 'Příliš mnoho pokusů, zkuste to později' } });
     try {
       const { token, user } = await login(app.db, b.data.email, b.data.password, 8, b.data.code);
       await app.core.audit.record(app.db, { actor_type: 'human', actor_id: `human:${user.email}`, action: 'auth.login', status: 'success' });

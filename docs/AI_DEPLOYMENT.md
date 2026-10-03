@@ -27,7 +27,7 @@ Za reverzní proxy (TLS) – aplikace sama TLS neterminuje.
 ## Před ostrým provozem (povinné)
 1. **Import skutečného katalogu, cen, skladu, kalkulačních pravidel a dopravy** z CSV: `npm run import -- <typ> <soubor.csv> [--dry-run]` (šablony a pravidla v `data/import-templates/README.md`), poté `npm run import -- deactivate-demo`. Přímý import z ERP zatím není.
 2. Nahrát technickou dokumentaci do KB (`upsertDocument`, viz `src/beleta/knowledge.ts`); demo dokumenty nahradit.
-3. **PostgreSQL server:** nastavte `DATABASE_URL=postgres://uživatel:heslo@host:5432/db` (má přednost před `DATA_DIR`/PGlite); migrace se aplikují při startu. Ověřeno na PostgreSQL 16 celou sadou testů (`TEST_DATABASE_URL=… npm test`) včetně souběžného zápisu auditu a rozhodování o schválení. Zálohy: `pg_dump`. Pozor: rate limiter je stále v paměti procesu (limity se při více instancích sčítají zvlášť) – před více instancemi dejte limity i na proxy.
+3. **PostgreSQL server:** nastavte `DATABASE_URL=postgres://uživatel:heslo@host:5432/db` (má přednost před `DATA_DIR`/PGlite); migrace se aplikují při startu. Ověřeno na PostgreSQL 16 celou sadou testů (`TEST_DATABASE_URL=… npm test`) včetně souběžného zápisu auditu a rozhodování o schválení. Zálohy: `pg_dump`. Rate limiter je při `DATABASE_URL` sdílený přes tabulku `rate_limits` (pevná okna; při výpadku DB spadne na paměťový); s PGlite běží v paměti procesu.
 4. Změnit výchozí hesla/tokeny; nastavit politiky v `/ai-sales/policies` (nechat konzervativní, tj. `discount.max_auto_pct=0`, `email.ai_auto_send=false`).
 5. Zálohy DB + export posledního `hash` auditu do externího úložiště.
 6. Ověřit na živém OpenAI klíči sadu reálných dotazů (viz AI_TESTING – manuální evaluace).

@@ -29,7 +29,7 @@ Výchozí kategorie vždy **C** (nebo **E**). „Nyní“: ✅ hotovo, 🟡 čá
 | R-20 | Cold calling | E | — | Až po právní analýze (GDPR, zákon o el. komunikacích) | Právní | Nízká | ⛔ záměrně |
 | R-21 | Hromadné e-maily | E | — | Denní limit + schvalování jsou připraveny jako brzda | Právní/reputační | Nízká | ⛔ záměrně |
 | R-22 | Auto slevy | E | — | `discount.max_auto_pct`=0; rozšířit až s matricí slev | Marže | Nízká | ⛔ záměrně |
-| R-23 | Hledání příležitostí | E | — | Nový agent + zdroje dat | — | Nízká | ⛔ |
+| R-23 | Hledání příležitostí | E | Aktivní vyhledávání zakázek s fasádou z obkladových pásků / lícových cihel na internetu | Agent OPPORTUNITY SCOUT + tools `web_search`/`fetch_page`, fronta příležitostí v admin – **návrh v `docs/AI_OPPORTUNITY_SEARCH.md`** | Právní (GDPR, nevyžádaná sdělení), náklady, kvalita zdrojů | **Vysoká (zadavatel potvrdil jako úkol)** | ⛔ návrh hotový, čeká na rozhodnutí o zdrojích |
 | R-24 | Hlas/telefon | E | — | Realtime API + stejné tools | — | Nízká | ⛔ |
 | R-25 | OpenAI / n8n / PostgreSQL | C | Dle zadání | provider, webhook, SQL | PGlite ≠ produkční PG | Vysoká | 🟡 SMTP, n8n webhook a PG/PGlite hotové; ⛔ `pg` adaptér, ⛔ hotové n8n workflow, ⛔ živé ověření |
 | R-26 | Testy | C | 12 scénářů + chyby | 94+ testů | — | Vysoká | ✅ |
@@ -46,7 +46,7 @@ Hotovo navíc: SMTP transport, PDF nabídek, GDPR (export/výmaz/retence), 2FA +
 |---|---|---|---|
 | 1 | Živé ověření | ANTHROPIC klíč, sada reálných dotazů, ladění promptů (zatím jen simulovaní klienti); OpenAI/Ollama/n8n/SMTP živě netestováno | R-03, R-12, R-25, R-26 |
 | 2 | Skutečná data | reálný katalog/ceny/sklad/pravidla/doprava, technická dokumentace do KB; import z ERP | R-01, R-02, R-04 |
-| 3 | ~~Databáze~~ ✅ | adaptér `pg` hotový a ověřen na PostgreSQL 16; zbývá rate limiter v paměti procesu | R-25 |
+| 3 | ~~Databáze~~ ✅ | adaptér `pg` hotový a ověřen na PostgreSQL 16; rate limiter je sdílený přes DB (`DATABASE_URL`) | R-25 |
 | 4 | n8n | workflow v `n8n/` (follow-upy, retence) hotové, neověřeno naživo; chybí případný workflow pro inbound e-maily | R-25, R-09 |
 | 5 | Znalostní báze | OpenAI File Search / vektorové vyhledávání (lokální KB je lexikální) | R-02, R-25 |
 | 6 | ~~Nabídky~~ ✅ | hotovo: číslování po letech, PDF příloha, odeslání jedním krokem z administrace | R-07, R-08 |
@@ -55,7 +55,8 @@ Hotovo navíc: SMTP transport, PDF nabídek, GDPR (export/výmaz/retence), 2FA +
 | 9 | Widget | ✅ vložení do webu (`WIDGET_FRAME_ANCESTORS`); chybí sběr kontaktu před předáním člověku | R-03 |
 | 10 | AI core | vytažení do samostatného balíčku pro CIHLICKY.CZ (zatím jen pravidlo bez importu domény) | R-15 |
 | 11 | Provoz | Dockerfile a CI přidány (neověřeno); chybí zálohy, monitoring, retence auditu, perzistentní rate limit | nefunkční |
-| 12 | Pozdější fáze (záměrně) | cold calling, hromadné e-maily, auto slevy, hledání příležitostí, hlas/telefon | R-20…R-24 |
+| 12 | **Aktivní vyhledávání zakázek** (fasáda z obkladových pásků / lícových cihel) | návrh `docs/AI_OPPORTUNITY_SEARCH.md`, implementace čeká na rozhodnutí o zdrojích a rozpočtu | R-23 |
+| 13 | Pozdější fáze (záměrně) | cold calling, hromadné e-maily, auto slevy, hlas/telefon | R-20, R-21, R-22, R-24 |
 
 ## Kontrola proti původnímu zadání (INITIAL DEVELOPMENT TASK)
 Zadání bylo dodáno až dodatečně; předchozí `MASTER_SPEC.md` z něj byl jen zpětně sestaven. Skutečné rozdíly:
