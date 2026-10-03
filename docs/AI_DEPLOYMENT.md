@@ -40,7 +40,7 @@ Hotové workflow k importu jsou v `n8n/` (follow-upy, GDPR retence; viz `n8n/REA
 `/widget` je výchozí `X-Frame-Options: DENY`. Pro vložení do webu nastavte `WIDGET_FRAME_ANCESTORS=https://www.beleta.cz` a vložte `<iframe src="https://ai.<doména>/widget" …>`; povolení platí jen pro `/widget`, administrace zůstává nevkládatelná.
 
 ## Docker a CI
-`Dockerfile` (Node 22, data v `/data`, healthcheck `/healthz`): `docker build -t beleta-ai . && docker run -p 3000:3000 -v beleta-data:/data --env-file .env beleta-ai` (v produkci `NODE_ENV=production` vyžaduje `INTERNAL_TOKEN`, `PUBLIC_ORIGIN`, `ADMIN_*` při prvním startu). **Image nebyl sestaven ani spuštěn** (v sandboxu není Docker). `.github/workflows/ci.yml`: typecheck, testy, `npm audit --audit-level=high` (běží až po pushi na GitHub).
+`Dockerfile` (Node 22, data v `/data`, healthcheck `/healthz`): `docker build -t beleta-ai . && docker run -p 3000:3000 -v beleta-data:/data --env-file .env beleta-ai` (v produkci `NODE_ENV=production` vyžaduje `INTERNAL_TOKEN`, `PUBLIC_ORIGIN`, `ADMIN_*` při prvním startu). **Image nebyl sestaven** (v sandboxu neběží Docker daemon); ověřeno jen `npm ci --omit=dev` + `npm start` v produkčním režimu (`/healthz`, `/widget` OK). `.github/workflows/ci.yml`: typecheck, testy, `npm audit --audit-level=high` (běží až po pushi na GitHub).
 
 ## Provozní poznámky
 Logy aplikace neobsahují PII; audit je v DB (`/ai-sales/activity`). Sledujte: počet `pending` schválení, chyby `llm_failure`, `max_steps`, stav integrity auditu.
