@@ -13,7 +13,7 @@ LLM: **Claude (Anthropic)** nebo OpenAI – přepínač `LLM_PROVIDER`. Bez klí
 Při `NODE_ENV!=production` se nahrají **ukázková** data (SKU `DEMO-*`). Produkční ceny/sklad se musí importovat z ERP – viz `docs/AI_DEPLOYMENT.md`.
 
 ## Windows – jedním dvojklikem
-Po stažení projektu (ZIP nebo `git clone`) rozbalte složku a **dvakrát klikněte na `start-windows.cmd`**. Skript zkontroluje/nainstaluje Node.js, vytvoří `.env` (zeptá se na váš e-mail a klíč Anthropic, heslo vygeneruje), nainstaluje závislosti, spustí aplikaci a otevře prohlížeč na `http://localhost:3000/ai-sales`. Skript nebyl ověřen na skutečném Windows.
+Po stažení projektu (ZIP nebo `git clone`) **ZIP nejdřív rozbalte** (pravé tlačítko → *Extrahovat vše…*; spuštění přímo z ZIPu nefunguje) a ve vytvořené složce **dvakrát klikněte na `start-windows.cmd`**. Skript zkontroluje/nainstaluje Node.js, vytvoří `.env` (zeptá se na váš e-mail a klíč Anthropic, heslo vygeneruje), nainstaluje závislosti, spustí aplikaci a otevře prohlížeč na `http://localhost:3000/ai-sales`. Skript nebyl ověřen na skutečném Windows.
 
 ## Dokumentace
 `docs/BELETA_CURRENT_ARCHITECTURE.md` · `docs/BELETA_AI_GAP_ANALYSIS.md` · `docs/AI_ARCHITECTURE.md` (návrh, změny DB/API, rizika, plán) · `AI_TOOLS` · `AI_AGENTS` · `AI_SECURITY` · `AI_DATABASE` · `AI_API` · `AI_DEPLOYMENT` · `AI_TESTING`
