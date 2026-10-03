@@ -59,3 +59,46 @@ describe('tělo požadavku', () => {
     await srv.close();
   });
 });
+
+import PDFDocument from 'pdfkit';
+import { chunkText } from '../src/beleta/knowledge.js';
+import { pdfToText } from '../src/beleta/pdf-text.js';
+
+const makePdf = (lines: string[]): Promise<Buffer> => new Promise((resolve) => {
+  const d = new PDFDocument(); const out: Buffer[] = [];
+  d.on('data', (c: Buffer) => out.push(c)); d.on('end', () => resolve(Buffer.concat(out)));
+  d.font('assets/fonts/DejaVuSans.ttf');
+  lines.forEach((l, i) => { if (i) d.addPage(); if (l) d.text(l); });
+  d.end();
+});
+
+describe('PDF do znalostní báze', () => {
+  test('extrakce textu s češtinou přes více stran; sken/nesmysl se odmítne', async () => {
+    const pdf = await makePdf(['Montáž hřebenáče: přesah je 50 mm.', 'Řezání tašek na hřebeni.']);
+    const r = await pdfToText(pdf);
+    expect(r.pages).toBe(2); expect(r.text).toContain('hřebenáče'); expect(r.text).toContain('Řezání tašek');
+    await expect(pdfToText(Buffer.from('tohle není pdf'))).rejects.toMatchObject({ code: 'validation_error' });
+    await expect(pdfToText(await makePdf(['']))).rejects.toMatchObject({ code: 'no_text' });
+  });
+  test('chunkText dělí dlouhý souvislý text (PDF bez prázdných řádků) na úseky', () => {
+    const long = Array.from({ length: 120 }, (_, i) => `Věta číslo ${i} o montáži.`).join(' ');
+    const chunks = chunkText(long);
+    expect(chunks.length).toBeGreaterThan(2); expect(chunks.every((c) => c.length <= 900)).toBe(true);
+    expect(chunks.join(' ')).toContain('Věta číslo 119');
+  });
+  test('REST: /kb/extract jen admin, vrátí text; pak uložení a vyhledání AI', async () => {
+    const { app, srv, call, login } = await setup();
+    const pdf = await makePdf(['Technický list: minimální sklon střechy pro tašku Klasik je 22 stupňů.']);
+    const H = { 'x-requested-with': 'beleta-admin', 'content-type': 'application/pdf' };
+    const cookie = await login('admin@test.cz', 'test-password-123');
+    const ex = await srv.inject({ method: 'POST', url: '/api/admin/ai-sales/kb/extract', headers: { ...H, cookie }, payload: pdf });
+    expect(ex.statusCode).toBe(200); expect(ex.json().text).toContain('minimální sklon');
+    expect((await srv.inject({ method: 'POST', url: '/api/admin/ai-sales/kb/extract', headers: { ...H, cookie }, payload: Buffer.from('xxxxxxxxxxxxxxxxxxxx') })).statusCode).toBe(400);
+    await createUser(app.db, { email: 'sales2@test.cz', role: 'sales', password: 'dlouhe-heslo-123' });
+    const sc = await login('sales2@test.cz', 'dlouhe-heslo-123');
+    expect((await srv.inject({ method: 'POST', url: '/api/admin/ai-sales/kb/extract', headers: { ...H, cookie: sc }, payload: pdf })).statusCode).toBe(403);
+    expect((await call('POST', '/kb', { title: 'Technický list Klasik', content: ex.json().text })).statusCode).toBe(200);
+    expect(JSON.stringify(ok(await run(app, 'search_knowledge', { query: 'minimální sklon střechy' })))).toContain('Technický list Klasik');
+    await srv.close();
+  });
+});

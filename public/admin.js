@@ -322,15 +322,24 @@ async function openDoc(id) {
   const title = h('input', { value: d.title, disabled: !edit }), cat = h('input', { value: d.category, disabled: !edit });
   const content = h('textarea', { rows: '16', disabled: !edit }, d.content);
   const active = h('input', { type: 'checkbox', checked: !!d.active, disabled: !edit });
-  const file = h('input', { type: 'file', accept: '.md,.txt,text/plain,text/markdown', onchange: async (e) => {
+  const file = h('input', { type: 'file', accept: '.md,.txt,.pdf,text/plain,text/markdown,application/pdf', onchange: async (e) => {
     const f = e.target.files[0]; if (!f) return;
-    if (f.size > 500000) { toast('Soubor je příliš velký (max. 500 kB textu)'); return; }
-    content.value = await f.text(); if (!title.value) title.value = f.name.replace(/\.[^.]+$/, '');
+    if (/\.pdf$/i.test(f.name) || f.type === 'application/pdf') {
+      if (f.size > 10 * 1024 * 1024) { toast('PDF je příliš velké (max. 10 MB)'); return; }
+      try {
+        const res = await fetch(API + S('/kb/extract'), { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/pdf', 'x-requested-with': 'beleta-admin' }, body: f });
+        const j = await res.json().catch(() => ({})); if (!res.ok) throw new Error(j.error?.message || 'Chyba ' + res.status);
+        content.value = j.text; toast('Načteno ' + j.pages + ' stran – text zkontrolujte před uložením');
+      } catch (ex) { toast(ex.message); return; }
+    } else {
+      if (f.size > 500000) { toast('Soubor je příliš velký (max. 500 kB textu)'); return; }
+      content.value = await f.text();
+    } if (!title.value) title.value = f.name.replace(/\.[^.]+$/, '');
   } });
   const save = async () => { try { await api(S(id ? '/kb/' + id : '/kb'), { method: id ? 'PUT' : 'POST', body: { title: title.value, category: cat.value || 'general', content: content.value, active: active.checked } }); toast('Uloženo'); dlg.close(); dlg.remove(); render(); } catch (e) { toast(e.message); } };
   const del = async () => { if (!confirm('Smazat dokument „' + d.title + '“? Nelze vrátit.')) return; try { await api(S('/kb/' + id), { method: 'DELETE' }); toast('Smazáno'); dlg.close(); dlg.remove(); render(); } catch (e) { toast(e.message); } };
   const dlg = h('dialog', {}, h('h3', {}, id ? d.title : 'Nový dokument'),
-    h('div', { class: 'form' }, h('label', {}, 'Název'), title, h('label', {}, 'Kategorie'), cat, h('label', {}, 'Aktivní'), active, edit ? [h('label', {}, 'Načíst ze souboru (.md, .txt)'), file] : null, h('label', {}, 'Text'), content),
+    h('div', { class: 'form' }, h('label', {}, 'Název'), title, h('label', {}, 'Kategorie'), cat, h('label', {}, 'Aktivní'), active, edit ? [h('label', {}, 'Načíst ze souboru (.md, .txt, .pdf)'), file] : null, h('label', {}, 'Text'), content),
     h('p', { class: 'muted' }, 'Text se dělí na úseky po odstavcích (prázdný řádek). Pište jeden fakt na odstavec a uvádějte název produktu.'),
     h('div', { class: 'toolbar' }, edit ? h('button', { class: 'primary', onclick: save }, 'Uložit') : null, edit && id ? h('button', { class: 'danger', onclick: del }, 'Smazat') : null, h('button', { onclick: () => { dlg.close(); dlg.remove(); } }, 'Zavřít')));
   document.body.append(dlg); dlg.showModal();

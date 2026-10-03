@@ -9,6 +9,7 @@ import * as admin from '../beleta/admin.js';
 import { eraseCustomer, exportCustomer, runRetention } from '../beleta/gdpr.js';
 import { getProductAdmin, listProducts, saveProduct } from '../beleta/catalog-admin.js';
 import { deleteDocument, getDocument, listDocuments, saveDocument, setDocumentActive } from '../beleta/knowledge.js';
+import { pdfToText } from '../beleta/pdf-text.js';
 import { IMPORT_TYPES, deactivateDemo, importCsv, importHelp, type ImportType } from '../beleta/import-csv.js';
 import { renderQuotePdf } from '../beleta/quote-pdf.js';
 import { createUser, listUsers, login, logout, totpDisable, totpEnable, totpEnabledFor, totpSetup, updateUser, userForToken, type AdminUser } from '../beleta/auth.js';
@@ -32,7 +33,7 @@ const uuid = z.string().uuid();
 const STATUS_BY_CODE: Record<string, number> = {
   validation_error: 400, bad_message: 400, forbidden: 403, invalid_credentials: 401, unknown_tool: 404, not_found: 404,
   product_not_found: 404, price_not_found: 404, stock_unknown: 404, customer_not_found: 404, lead_not_found: 404, project_not_found: 404, quote_not_found: 404,
-  not_pending: 409, already_erased: 409, user_exists: 409, title_exists: 409, sku_exists: 409, quote_not_ready: 409, totp_required: 401, invalid_code: 400, totp_already_enabled: 409, totp_not_enabled: 409, ai_unavailable: 503, denied: 403,
+  not_pending: 409, already_erased: 409, user_exists: 409, no_text: 422, title_exists: 409, sku_exists: 409, quote_not_ready: 409, totp_required: 401, invalid_code: 400, totp_already_enabled: 409, totp_not_enabled: 409, ai_unavailable: 503, denied: 403,
 };
 
 export async function buildServer(app: Beleta, cfg: ServerConfig) {
@@ -46,6 +47,7 @@ export async function buildServer(app: Beleta, cfg: ServerConfig) {
     if (raw === '') return done(null, undefined);
     try { done(null, JSON.parse(raw as string)); } catch { const e: any = new Error('Neplatný JSON'); e.statusCode = 400; done(e, undefined); }
   });
+  f.addContentTypeParser('application/pdf', { parseAs: 'buffer', bodyLimit: 10 * 1024 * 1024 }, (_req, raw, done) => done(null, raw));
   f.addContentTypeParser(['text/csv', 'text/plain'], { parseAs: 'string', bodyLimit: 5 * 1024 * 1024 }, (_req, body, done) => done(null, body));
   const files = new Map<string, Buffer>();
   const file = (name: string) => { let b = files.get(name); if (!b) { b = readFileSync(join(ROOT, 'public', name)); files.set(name, b); } return b; };
@@ -297,6 +299,11 @@ export async function buildServer(app: Beleta, cfg: ServerConfig) {
     app.core.audit.record(app.db, { actor_type: 'human', actor_id: humanActor(me(req).user).id, action, status: 'success', entity_type: 'kb_document', entity_id: id, output });
   f.get(`${S}/kb`, async () => listDocuments(app.db));
   f.get(`${S}/kb/:id`, async (req) => { const r = await getDocument(app.db, kbId(req)); if (!r) throw new DomainError('not_found', 'Dokument neexistuje'); return r; });
+  f.post(`${S}/kb/extract`, { bodyLimit: 10 * 1024 * 1024 }, async (req) => {
+    needAdmin(req);
+    if (!Buffer.isBuffer(req.body)) throw new DomainError('validation_error', 'Očekáváno tělo application/pdf');
+    return pdfToText(req.body); // jen náhled textu; uložení dělá admin přes POST /kb po kontrole
+  });
   f.post(`${S}/kb`, { bodyLimit: 1024 * 1024 }, async (req) => {
     needAdmin(req); const b = body(kbBody, req);
     const r = await saveDocument(app.db, null, b); await kbAudit(req, 'kb.create', r.id, { title: b.title, chunks: r.chunks }); return r;

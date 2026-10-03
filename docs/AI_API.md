@@ -34,6 +34,7 @@ Veřejné API **nemá žádný zápisový endpoint**; zápisy dělá jen AI pře
 | GET | `…/products?q=` · `…/products/:id` – katalog (cena, sklad, kalkulační pravidlo, příslušenství, historie cen) | všechny |
 | POST/PATCH | `…/products` · `…/products/:id` – vytvoření/úprava produktu, ceny (nová platná cena od dneška, historie se zachová), skladu, parametrů a kalkulačního pravidla; nový produkt vyžaduje `sku`, `name`, `price_net`; SKU nelze měnit; auditováno (`catalog.create/update`) | admin |
 | GET/POST/PUT/DELETE | `…/kb`, `…/kb/:id` (`{title, content, category?, active?}`, POST `…/kb/:id/active` `{active}`) – správa znalostní báze; úseky se přegenerují při uložení; zápisy jen admin, auditováno (`kb.*`); text max. 500 000 znaků | čtení všichni, zápis admin |
+| POST | `…/kb/extract` (tělo `application/pdf`, max 10 MB) → `{text, pages}` – jen náhled textu z PDF s textovou vrstvou (sken bez textu = 422 `no_text`, OCR není); uložení přes POST `…/kb` po kontrole | admin |
 | GET/POST | `…/import` (popis sloupců) · `…/import/:type?dry_run=1` (`products|calc_rules|accessory_rules|shipping_zones|shipping_rates`, tělo `text/csv`, max 5 MB, vše-nebo-nic) · `…/demo/deactivate` | admin |
 | PUT | `…/policies/:key` `{value}` (typ musí odpovídat) | admin |
 

@@ -7,7 +7,19 @@ export interface KnowledgeHit { document_id: string; title: string; ord: number;
 export interface KnowledgeProvider { search(db: Db, query: string, limit: number): Promise<KnowledgeHit[]> }
 
 export function chunkText(text: string, max = 900): string[] {
-  const paras = text.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+  // odstavce; příliš dlouhý odstavec (typicky text z PDF bez prázdných řádků) se dělí po řádcích / větách / slovech
+  const split = (p: string): string[] => {
+    if (p.length <= max) return [p];
+    const parts = p.split(/\n|(?<=[.!?])\s+/).map((x) => x.trim()).filter(Boolean);
+    const out: string[] = []; let cur = '';
+    for (const part of parts) {
+      if (part.length > max) { if (cur) { out.push(cur); cur = ''; } for (let i = 0; i < part.length; i += max) out.push(part.slice(i, i + max)); continue; }
+      if (cur && (cur + ' ' + part).length > max) { out.push(cur); cur = part; } else cur = cur ? cur + ' ' + part : part;
+    }
+    if (cur) out.push(cur);
+    return out;
+  };
+  const paras = text.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean).flatMap(split);
   const out: string[] = []; let cur = '';
   for (const p of paras) {
     if (cur && (cur + '\n\n' + p).length > max) { out.push(cur); cur = p; } else cur = cur ? cur + '\n\n' + p : p;
