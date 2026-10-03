@@ -14,6 +14,7 @@ Node.js ≥ 22. Instalace: `npm ci --legacy-peer-deps` (npm 10 má s některými
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` (výchozí `claude-opus-5-5`; levnější `claude-sonnet-5-5`), `ANTHROPIC_EFFORT`, `ANTHROPIC_FALLBACKS` | Claude. Klíč: console.anthropic.com → API keys |
 | `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_BASE_URL` | OpenAI (alternativa); bez jakéhokoli klíče chat vrací 503 |
 | `INTERNAL_TOKEN` | n8n → `/api/internal/*` |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | přímé odesílání e-mailů přes SMTP (transport `smtp`, má přednost před n8n; `SMTP_FROM` povinné) |
 | `N8N_EMAIL_WEBHOOK` | pokud prázdné, e-maily se jen zapíší do `email_outbox` (transport `log`) |
 | `TRUST_PROXY=true` | za reverzní proxy (správná IP pro rate limit) |
 | `SEED_DEMO` | vynucení/zákaz demo dat |
